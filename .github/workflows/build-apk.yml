@@ -3,7 +3,7 @@ name: Build A Adventure APK
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "master" ]
+    branches: ["main", "master"]
 
 permissions:
   contents: read
@@ -24,12 +24,13 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Prepare Android SDK
         shell: bash
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" \
             "build-tools;35.0.0"
@@ -37,7 +38,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: "8.7"
 
       - name: Generate Gradle wrapper
         run: gradle wrapper --gradle-version 8.7
@@ -46,6 +47,9 @@ jobs:
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.A_ADVENTURE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.A_ADVENTURE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.A_ADVENTURE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.A_ADVENTURE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -53,26 +57,6 @@ jobs:
             echo "ERROR: A_ADVENTURE_KEYSTORE_BASE64 is empty."
             exit 1
           fi
-
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/a-adventure-release.jks"
-
-          if [ ! -s "$RUNNER_TEMP/a-adventure-release.jks" ]; then
-            echo "ERROR: Keystore file is empty."
-            exit 1
-          fi
-
-          echo "A_ADVENTURE_KEYSTORE_PATH=$RUNNER_TEMP/a-adventure-release.jks" >> "$GITHUB_ENV"
-
-      - name: Verify signing key
-        shell: bash
-        env:
-          STORE_PASSWORD: ${{ secrets.A_ADVENTURE_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.A_ADVENTURE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.A_ADVENTURE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          KEYSTORE="$RUNNER_TEMP/a-adventure-release.jks"
 
           if [ -z "$STORE_PASSWORD" ]; then
             echo "ERROR: A_ADVENTURE_STORE_PASSWORD is empty."
@@ -89,93 +73,19 @@ jobs:
             exit 1
           fi
 
-          echo "Checking keystore password..."
+          KEYSTORE="$RUNNER_TEMP/a-adventure-release.jks"
 
-          if ! keytool -list \
-            -keystore "$KEYSTORE" \
-            -storepass "$STORE_PASSWORD" \
-            >/dev/null 2>&1; then
-            echo "ERROR: A_ADVENTURE_STORE_PASSWORD is incorrect."
-            exit 1
-          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
 
-          echo "Keystore password: OK"
-          echo "Checking key alias..."
+          test -s "$KEYSTORE"
 
-          if ! keytool -list \
-            -keystore "$KEYSTORE" \
-            -storepass "$STORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
-            >/dev/null 2>&1; then
-            echo "ERROR: A_ADVENTURE_KEY_ALIAS is incorrect."
-            exit 1
-          fi
+          echo "A_ADVENTURE_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "A_ADVENTURE_STORE_PASSWORD=$STORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "A_ADVENTURE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "A_ADVENTURE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
 
-          echo "Key alias: OK"
-          echo "Checking key password..."
-
-          cat > "$RUNNER_TEMP/VerifyKey.java" <<'EOF'
-          import java.io.FileInputStream;
-          import java.security.Key;
-          import java.security.KeyStore;
-
-          public class VerifyKey {
-              public static void main(String[] args) throws Exception {
-                  String file = args[0];
-                  String storePass = args[1];
-                  String alias = args[2];
-                  String keyPass = args[3];
-
-                  KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-
-                  try (FileInputStream in = new FileInputStream(file)) {
-                      ks.load(in, storePass.toCharArray());
-                  }
-
-                  Key key = ks.getKey(alias, keyPass.toCharArray());
-
-                  if (key == null) {
-                      throw new Exception("Key could not be read.");
-                  }
-
-                  System.out.println("Key password: OK");
-              }
-          }
-          EOF
-
-          javac "$RUNNER_TEMP/VerifyKey.java"
-
-          java -cp "$RUNNER_TEMP" VerifyKey \
-            "$KEYSTORE" \
-            "$STORE_PASSWORD" \
-            "$KEY_ALIAS" \
-            "$KEY_PASSWORD"
-
-      - name: Build signed release APK
-        env:
-          A_ADVENTURE_STORE_PASSWORD: ${{ secrets.A_ADVENTURE_STORE_PASSWORD }}
-          A_ADVENTURE_KEY_ALIAS: ${{ secrets.A_ADVENTURE_KEY_ALIAS }}
-          A_ADVENTURE_KEY_PASSWORD: ${{ secrets.A_ADVENTURE_KEY_PASSWORD }}
-        run: |
-          ./gradlew assembleRelease --no-daemon
-
-      - name: Verify APK signature
+      - name: Verify signing key
         shell: bash
-        run: |
-          set -euo pipefail
-
-          APK="app/build/outputs/apk/release/app-release.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: Release APK was not created."
-            exit 1
-          fi
-
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-
-          echo "SIGNED RELEASE APK: OK"
-
-      - name: Upload signed release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: A-Adventure-0.1.1
+        env:
+          STORE_PASSWORD: ${{ secrets.A_ADVENTURE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets
