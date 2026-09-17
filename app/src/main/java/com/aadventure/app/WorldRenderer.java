@@ -19,6 +19,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int colorHandle;
     private int mvpMatrixHandle;
 
+    private FloatBuffer cubeBuffer;
     private FloatBuffer groundBuffer;
 
     private final float[] projectionMatrix = new float[16];
@@ -27,7 +28,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private final float[] mvpMatrix = new float[16];
 
     // --------------------------------------------------
-    // FIRST-PERSON CAMERA
+    // FIRST PERSON CAMERA
     // --------------------------------------------------
 
     private float cameraX = 0f;
@@ -47,12 +48,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private float moveSide = 0f;
 
     private static final float MOVEMENT_SMOOTHING = 0.18f;
-
-    // Movement speed.
     private static final float MOVE_SPEED = 0.18f;
 
     // --------------------------------------------------
-    // WORLD LIMITS
+    // WORLD
     // --------------------------------------------------
 
     private static final float WORLD_LEFT = -1850f;
@@ -82,9 +81,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     public WorldRenderer() {
     }
 
-    // --------------------------------------------------
-    // OPENGL INITIALIZATION
-    // --------------------------------------------------
+    // ==================================================
+    // OPENGL
+    // ==================================================
 
     @Override
     public void onSurfaceCreated(
@@ -92,15 +91,25 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             EGLConfig config
     ) {
 
+        /*
+         * Sky colour.
+         */
         GLES20.glClearColor(
-                0.49f,
-                0.74f,
-                0.34f,
+                0.42f,
+                0.70f,
+                0.92f,
                 1.0f
         );
 
+        /*
+         * Enable depth.
+         */
         GLES20.glEnable(
                 GLES20.GL_DEPTH_TEST
+        );
+
+        GLES20.glDepthFunc(
+                GLES20.GL_LEQUAL
         );
 
         program = createProgram(
@@ -127,6 +136,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 );
 
         createGround();
+        createCube();
     }
 
     @Override
@@ -147,6 +157,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 (float) width /
                 (float) height;
 
+        /*
+         * Perspective camera.
+         */
         Matrix.frustumM(
                 projectionMatrix,
                 0,
@@ -162,10 +175,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
-    // MAIN FRAME
-    // --------------------------------------------------
-
     @Override
     public void onDrawFrame(GL10 gl) {
 
@@ -175,15 +184,57 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
 
         updateMovement();
-
         updateCamera();
 
+        /*
+         * Draw the complete first-person scene.
+         */
         drawGround();
+
+        drawWorldObjects();
     }
 
-    // --------------------------------------------------
+    // ==================================================
+    // CAMERA
+    // ==================================================
+
+    private void updateCamera() {
+
+        cameraY = 1.7f;
+
+        float lookDistance = 2.0f;
+
+        float lookX =
+                cameraX +
+                (float) Math.sin(yaw) *
+                lookDistance;
+
+        float lookZ =
+                cameraZ -
+                (float) Math.cos(yaw) *
+                lookDistance;
+
+        Matrix.setLookAtM(
+                viewMatrix,
+                0,
+
+                cameraX,
+                cameraY,
+                cameraZ,
+
+                lookX,
+                cameraY,
+                lookZ,
+
+                0f,
+                1f,
+                0f
+        );
+    }
+
+    // ==================================================
     // MOVEMENT INPUT
-    // --------------------------------------------------
+    // ==================================================
 
     public synchronized void addMovement(
             float forward,
@@ -193,7 +244,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         targetMoveForward += forward;
         targetMoveSide += side;
 
-        // Prevent very large touch jumps.
         targetMoveForward =
                 clamp(
                         targetMoveForward,
@@ -215,19 +265,18 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         yaw += amount;
 
-        // Keep yaw inside a normal range.
         if (yaw > Math.PI * 2f) {
-            yaw -= (float)(Math.PI * 2f);
+            yaw -= (float) (Math.PI * 2f);
         }
 
         if (yaw < -Math.PI * 2f) {
-            yaw += (float)(Math.PI * 2f);
+            yaw += (float) (Math.PI * 2f);
         }
     }
 
-    // --------------------------------------------------
+    // ==================================================
     // SMOOTH MOVEMENT
-    // --------------------------------------------------
+    // ==================================================
 
     private synchronized void updateMovement() {
 
@@ -239,25 +288,21 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 (targetMoveSide - moveSide)
                 * MOVEMENT_SMOOTHING;
 
-        // Slowly return input toward zero.
         targetMoveForward *= 0.88f;
         targetMoveSide *= 0.88f;
 
-        // Direction vectors.
-
         float forwardX =
-                (float)Math.sin(yaw);
+                (float) Math.sin(yaw);
 
         float forwardZ =
-                -(float)Math.cos(yaw);
+                -(float) Math.cos(yaw);
 
         float rightX =
-                (float)Math.cos(yaw);
+                (float) Math.cos(yaw);
 
         float rightZ =
-                (float)Math.sin(yaw);
+                (float) Math.sin(yaw);
 
-        // Forward/back movement.
         cameraX +=
                 forwardX *
                 moveForward *
@@ -268,7 +313,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 moveForward *
                 MOVE_SPEED;
 
-        // Left/right movement.
         cameraX +=
                 rightX *
                 moveSide *
@@ -282,84 +326,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         clampCameraPosition();
     }
 
-    // --------------------------------------------------
-    // CAMERA
-    // --------------------------------------------------
-
-    private void updateCamera() {
-
-        // Fixed first-person eye height.
-        cameraY = 1.7f;
-
-        float lookDistance = 1f;
-
-        float lookX =
-                cameraX +
-                (float)Math.sin(yaw) *
-                lookDistance;
-
-        float lookZ =
-                cameraZ -
-                (float)Math.cos(yaw) *
-                lookDistance;
-
-        Matrix.setLookAtM(
-                viewMatrix,
-                0,
-
-                cameraX,
-                cameraY,
-                cameraZ,
-
-                lookX,
-                cameraY,
-                lookZ,
-
-                0f,
-                1f,
-                0f
-        );
-    }
-
-    // --------------------------------------------------
-    // CAMERA LIMIT
-    // --------------------------------------------------
-
-    private void clampCameraPosition() {
-
-        cameraX =
-                clamp(
-                        cameraX,
-                        WORLD_LEFT,
-                        WORLD_RIGHT
-                );
-
-        cameraZ =
-                clamp(
-                        cameraZ,
-                        WORLD_FRONT,
-                        WORLD_BACK
-                );
-    }
-
-    private float clamp(
-            float value,
-            float minimum,
-            float maximum
-    ) {
-
-        return Math.max(
-                minimum,
-                Math.min(
-                        maximum,
-                        value
-                )
-        );
-    }
-
-    // --------------------------------------------------
+    // ==================================================
     // GROUND
-    // --------------------------------------------------
+    // ==================================================
 
     private void createGround() {
 
@@ -389,7 +358,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 buffer.asFloatBuffer();
 
         groundBuffer.put(vertices);
-
         groundBuffer.position(0);
     }
 
@@ -404,27 +372,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0
         );
 
-        Matrix.multiplyMM(
-                mvpMatrix,
-                0,
-
-                viewMatrix,
-                0,
-
-                modelMatrix,
-                0
-        );
-
-        Matrix.multiplyMM(
-                mvpMatrix,
-                0,
-
-                projectionMatrix,
-                0,
-
-                mvpMatrix,
-                0
-        );
+        buildMVP();
 
         GLES20.glUniformMatrix4fv(
                 mvpMatrixHandle,
@@ -434,13 +382,15 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0
         );
 
-        // Green ground.
+        /*
+         * Main grass colour.
+         */
         GLES20.glUniform4f(
                 colorHandle,
 
-                0.30f,
-                0.55f,
-                0.22f,
+                0.24f,
+                0.52f,
+                0.20f,
                 1.0f
         );
 
@@ -475,9 +425,373 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
-    // SHADER
-    // --------------------------------------------------
+    // ==================================================
+    // CUBE
+    // ==================================================
+
+    private void createCube() {
+
+        float[] vertices = {
+
+                // Front
+                -0.5f, -0.5f,  0.5f,
+                 0.5f, -0.5f,  0.5f,
+                 0.5f,  0.5f,  0.5f,
+
+                -0.5f, -0.5f,  0.5f,
+                 0.5f,  0.5f,  0.5f,
+                -0.5f,  0.5f,  0.5f,
+
+                // Back
+                -0.5f, -0.5f, -0.5f,
+                -0.5f,  0.5f, -0.5f,
+                 0.5f,  0.5f, -0.5f,
+
+                -0.5f, -0.5f, -0.5f,
+                 0.5f,  0.5f, -0.5f,
+                 0.5f, -0.5f, -0.5f,
+
+                // Left
+                -0.5f, -0.5f, -0.5f,
+                -0.5f, -0.5f,  0.5f,
+                -0.5f,  0.5f,  0.5f,
+
+                -0.5f, -0.5f, -0.5f,
+                -0.5f,  0.5f,  0.5f,
+                -0.5f,  0.5f, -0.5f,
+
+                // Right
+                 0.5f, -0.5f, -0.5f,
+                 0.5f,  0.5f, -0.5f,
+                 0.5f,  0.5f,  0.5f,
+
+                 0.5f, -0.5f, -0.5f,
+                 0.5f,  0.5f,  0.5f,
+                 0.5f, -0.5f,  0.5f,
+
+                // Top
+                -0.5f,  0.5f, -0.5f,
+                -0.5f,  0.5f,  0.5f,
+                 0.5f,  0.5f,  0.5f,
+
+                -0.5f,  0.5f, -0.5f,
+                 0.5f,  0.5f,  0.5f,
+                 0.5f,  0.5f, -0.5f,
+
+                // Bottom
+                -0.5f, -0.5f, -0.5f,
+                 0.5f, -0.5f, -0.5f,
+                 0.5f, -0.5f,  0.5f,
+
+                -0.5f, -0.5f, -0.5f,
+                 0.5f, -0.5f,  0.5f,
+                -0.5f, -0.5f,  0.5f
+        };
+
+        ByteBuffer buffer =
+                ByteBuffer.allocateDirect(
+                        vertices.length * 4
+                );
+
+        buffer.order(
+                ByteOrder.nativeOrder()
+        );
+
+        cubeBuffer =
+                buffer.asFloatBuffer();
+
+        cubeBuffer.put(vertices);
+        cubeBuffer.position(0);
+    }
+
+    // ==================================================
+    // WORLD OBJECTS
+    // ==================================================
+
+    private void drawWorldObjects() {
+
+        /*
+         * Trees placed in front of the player.
+         */
+
+        drawTree(-7f, -12f, 1.3f);
+        drawTree(5f, -18f, 1.6f);
+        drawTree(-12f, -28f, 1.8f);
+        drawTree(13f, -35f, 2.0f);
+
+        drawTree(-22f, -48f, 2.4f);
+        drawTree(22f, -55f, 2.5f);
+
+        /*
+         * Smaller trees.
+         */
+
+        drawTree(8f, -70f, 2.2f);
+        drawTree(-18f, -78f, 2.0f);
+
+        /*
+         * Rocks.
+         */
+
+        drawRock(-3f, -9f, 0.8f);
+        drawRock(3f, -15f, 0.6f);
+        drawRock(-8f, -23f, 1.0f);
+        drawRock(10f, -30f, 0.9f);
+
+        drawRock(-16f, -42f, 1.2f);
+        drawRock(17f, -50f, 1.1f);
+    }
+
+    // ==================================================
+    // TREE
+    // ==================================================
+
+    private void drawTree(
+            float x,
+            float z,
+            float scale
+    ) {
+
+        /*
+         * Trunk.
+         */
+
+        drawCube(
+                x,
+                1.5f * scale,
+                z,
+
+                0.7f * scale,
+                3.0f * scale,
+                0.7f * scale,
+
+                0.34f,
+                0.20f,
+                0.10f,
+                1.0f
+        );
+
+        /*
+         * Lower leaves.
+         */
+
+        drawCube(
+                x,
+                3.6f * scale,
+                z,
+
+                3.2f * scale,
+                2.2f * scale,
+                3.2f * scale,
+
+                0.10f,
+                0.42f,
+                0.10f,
+                1.0f
+        );
+
+        /*
+         * Upper leaves.
+         */
+
+        drawCube(
+                x,
+                5.3f * scale,
+                z,
+
+                2.4f * scale,
+                2.0f * scale,
+                2.4f * scale,
+
+                0.12f,
+                0.50f,
+                0.12f,
+                1.0f
+        );
+    }
+
+    // ==================================================
+    // ROCK
+    // ==================================================
+
+    private void drawRock(
+            float x,
+            float z,
+            float scale
+    ) {
+
+        drawCube(
+                x,
+                0.45f * scale,
+                z,
+
+                1.8f * scale,
+                0.9f * scale,
+                1.4f * scale,
+
+                0.34f,
+                0.34f,
+                0.31f,
+                1.0f
+        );
+    }
+
+    // ==================================================
+    // DRAW CUBE
+    // ==================================================
+
+    private void drawCube(
+            float x,
+            float y,
+            float z,
+
+            float scaleX,
+            float scaleY,
+            float scaleZ,
+
+            float red,
+            float green,
+            float blue,
+            float alpha
+    ) {
+
+        GLES20.glUseProgram(
+                program
+        );
+
+        Matrix.setIdentityM(
+                modelMatrix,
+                0
+        );
+
+        Matrix.translateM(
+                modelMatrix,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.scaleM(
+                modelMatrix,
+                0,
+                scaleX,
+                scaleY,
+                scaleZ
+        );
+
+        buildMVP();
+
+        GLES20.glUniformMatrix4fv(
+                mvpMatrixHandle,
+                1,
+                false,
+                mvpMatrix,
+                0
+        );
+
+        GLES20.glUniform4f(
+                colorHandle,
+                red,
+                green,
+                blue,
+                alpha
+        );
+
+        cubeBuffer.position(0);
+
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
+
+        GLES20.glVertexAttribPointer(
+                positionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                12,
+                cubeBuffer
+        );
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                36
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                positionHandle
+        );
+    }
+
+    // ==================================================
+    // MVP
+    // ==================================================
+
+    private void buildMVP() {
+
+        Matrix.multiplyMM(
+                mvpMatrix,
+                0,
+
+                viewMatrix,
+                0,
+
+                modelMatrix,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvpMatrix,
+                0,
+
+                projectionMatrix,
+                0,
+
+                mvpMatrix,
+                0
+        );
+    }
+
+    // ==================================================
+    // LIMITS
+    // ==================================================
+
+    private void clampCameraPosition() {
+
+        cameraX =
+                clamp(
+                        cameraX,
+                        WORLD_LEFT,
+                        WORLD_RIGHT
+                );
+
+        cameraZ =
+                clamp(
+                        cameraZ,
+                        WORLD_FRONT,
+                        WORLD_BACK
+                );
+    }
+
+    private float clamp(
+            float value,
+            float minimum,
+            float maximum
+    ) {
+
+        return Math.max(
+                minimum,
+                Math.min(
+                        maximum,
+                        value
+                )
+        );
+    }
+
+    // ==================================================
+    // SHADERS
+    // ==================================================
 
     private int loadShader(
             int type,
@@ -492,9 +806,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 shaderCode
         );
 
-        GLES20.glCompileShader(
-                shader
-        );
+        GLES20.glCompileShader(shader);
 
         return shader;
     }
@@ -535,4 +847,4 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         return createdProgram;
     }
-}
+    }
