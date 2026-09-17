@@ -1,3 +1,4 @@
+
 plugins {
     id 'com.android.application'
 }
@@ -12,6 +13,29 @@ android {
         targetSdk 35
         versionCode 1
         versionName "0.1.1"
+    }
+
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv('A_ADVENTURE_KEYSTORE_PATH')
+            def storePasswordValue = System.getenv('A_ADVENTURE_STORE_PASSWORD')
+            def keyAliasValue = System.getenv('A_ADVENTURE_KEY_ALIAS')
+            def keyPasswordValue = System.getenv('A_ADVENTURE_KEY_PASSWORD')
+
+            if (keystorePath && storePasswordValue && keyAliasValue && keyPasswordValue) {
+                storeFile file(keystorePath)
+                storePassword storePasswordValue
+                keyAlias keyAliasValue
+                keyPassword keyPasswordValue
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
     }
 }
 
