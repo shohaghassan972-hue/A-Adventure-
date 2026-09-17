@@ -54,9 +54,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     // Sun direction in world space.
     // With yaw = 0, the player initially looks toward -Z.
-    private static final float SUN_DIR_X = 0.55f;
+    private static final float SUN_DIR_X = 0.38f;
     private static final float SUN_DIR_Y = 0.58f;
-    private static final float SUN_DIR_Z = -0.60f;
+    private static final float SUN_DIR_Z = -0.78f;
 
     @Override
     public void onSurfaceCreated(
@@ -401,36 +401,36 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         // World-fixed clouds.
         drawSkyBillboard(
-                -0.62f,
-                0.36f,
-                -0.70f,
+                -0.34f,
+                0.34f,
+                -0.94f,
                 18f,
                 1f,
                 0.92f
         );
 
         drawSkyBillboard(
-                -0.15f,
+                -0.05f,
                 0.30f,
-                -0.92f,
+                -1.00f,
                 13f,
                 1f,
                 0.82f
         );
 
         drawSkyBillboard(
-                0.68f,
+                0.38f,
                 0.28f,
-                -0.70f,
+                -0.92f,
                 15f,
                 1f,
                 0.86f
         );
 
         drawSkyBillboard(
-                -0.82f,
+                -0.52f,
                 0.18f,
-                -0.35f,
+                -0.86f,
                 11f,
                 1f,
                 0.72f
