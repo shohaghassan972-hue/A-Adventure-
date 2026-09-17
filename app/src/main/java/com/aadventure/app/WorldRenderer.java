@@ -8,27 +8,21 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
-
 public class WorldRenderer implements GLSurfaceView.Renderer {
 
-    private int program;
-
-    private int positionHandle;
-    private int colorHandle;
-    private int mvpMatrixHandle;
+    private final float[] projection = new float[16];
+    private final float[] view = new float[16];
+    private final float[] model = new float[16];
+    private final float[] mvp = new float[16];
 
     private FloatBuffer cubeBuffer;
-    private FloatBuffer groundBuffer;
     private FloatBuffer sphereBuffer;
-
     private int sphereVertexCount;
 
-    private final float[] projectionMatrix = new float[16];
-    private final float[] viewMatrix = new float[16];
-    private final float[] modelMatrix = new float[16];
-    private final float[] mvpMatrix = new float[16];
+    private int program;
+    private int positionHandle;
+    private int colorHandle;
+    private int mvpHandle;
 
     // First-person camera
     private float cameraX = 0f;
@@ -37,53 +31,61 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private float yaw = 0f;
 
-    // Movement
-    private float targetMoveForward = 0f;
-    private float targetMoveSide = 0f;
-
-    private float moveForward = 0f;
-    private float moveSide = 0f;
-
-    private static final float MOVEMENT_SMOOTHING = 0.18f;
-    private static final float MOVE_SPEED = 0.18f;
-
-    // World limits
-    private static final float WORLD_LEFT = -1850f;
-    private static final float WORLD_RIGHT = 1850f;
-    private static final float WORLD_FRONT = -1250f;
-    private static final float WORLD_BACK = 1250f;
-
-    private static final String VERTEX_SHADER =
-            "uniform mat4 uMVPMatrix;" +
-            "attribute vec4 aPosition;" +
-            "void main() {" +
-            "    gl_Position = uMVPMatrix * aPosition;" +
-            "}";
-
-    private static final String FRAGMENT_SHADER =
-            "precision mediump float;" +
-            "uniform vec4 uColor;" +
-            "void main() {" +
-            "    gl_FragColor = uColor;" +
-            "}";
-
     @Override
-    public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+    public void onSurfaceCreated(
+            javax.microedition.khronos.egl.EGLConfig config) {
 
         GLES20.glClearColor(
-                0.42f,
-                0.70f,
-                0.92f,
-                1.0f
+                0.38f,
+                0.67f,
+                0.88f,
+                1f
         );
 
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
-        GLES20.glDepthFunc(GLES20.GL_LEQUAL);
 
-        program = createProgram(
-                VERTEX_SHADER,
-                FRAGMENT_SHADER
+        String vertexShaderCode =
+                "attribute vec4 aPosition;" +
+                "attribute vec4 aColor;" +
+                "uniform mat4 uMVP;" +
+                "varying vec4 vColor;" +
+
+                "void main() {" +
+                "    gl_Position = uMVP * aPosition;" +
+                "    vColor = aColor;" +
+                "}";
+
+        String fragmentShaderCode =
+                "precision mediump float;" +
+                "varying vec4 vColor;" +
+
+                "void main() {" +
+                "    gl_FragColor = vColor;" +
+                "}";
+
+        int vertexShader = loadShader(
+                GLES20.GL_VERTEX_SHADER,
+                vertexShaderCode
         );
+
+        int fragmentShader = loadShader(
+                GLES20.GL_FRAGMENT_SHADER,
+                fragmentShaderCode
+        );
+
+        program = GLES20.glCreateProgram();
+
+        GLES20.glAttachShader(
+                program,
+                vertexShader
+        );
+
+        GLES20.glAttachShader(
+                program,
+                fragmentShader
+        );
+
+        GLES20.glLinkProgram(program);
 
         positionHandle =
                 GLES20.glGetAttribLocation(
@@ -92,28 +94,28 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 );
 
         colorHandle =
-                GLES20.glGetUniformLocation(
+                GLES20.glGetAttribLocation(
                         program,
-                        "uColor"
+                        "aColor"
                 );
 
-        mvpMatrixHandle =
+        mvpHandle =
                 GLES20.glGetUniformLocation(
                         program,
-                        "uMVPMatrix"
+                        "uMVP"
                 );
 
-        createGround();
         createCube();
-        createSphere();
+
+        // Low-poly sphere for natural foliage.
+        createSphere(8, 12);
     }
 
     @Override
     public void onSurfaceChanged(
-            GL10 gl,
+            javax.microedition.khronos.opengles.GL10 gl,
             int width,
-            int height
-    ) {
+            int height) {
 
         GLES20.glViewport(
                 0,
@@ -126,550 +128,585 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 (float) width /
                 (float) height;
 
-        Matrix.frustumM(
-                projectionMatrix,
+        Matrix.perspectiveM(
+                projection,
                 0,
-                -ratio,
+                70f,
                 ratio,
-                -1f,
-                1f,
-                1f,
-                5000f
+                0.1f,
+                150f
         );
     }
 
     @Override
-    public void onDrawFrame(GL10 gl) {
+    public void onDrawFrame(
+            javax.microedition.khronos.opengles.GL10 gl) {
 
         GLES20.glClear(
                 GLES20.GL_COLOR_BUFFER_BIT |
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
-        updateMovement();
-        updateCamera();
-
-        drawGround();
-        drawWorldObjects();
-    }
-
-    // ==================================================
-    // CAMERA
-    // ==================================================
-
-    private void updateCamera() {
-
-        cameraY = 1.7f;
-
-        float lookDistance = 2.0f;
-
+        // Camera looks forward according to yaw.
         float lookX =
                 cameraX +
-                (float) Math.sin(yaw) *
-                lookDistance;
+                (float) Math.sin(yaw);
+
+        float lookY =
+                cameraY;
 
         float lookZ =
                 cameraZ -
-                (float) Math.cos(yaw) *
-                lookDistance;
+                (float) Math.cos(yaw);
 
         Matrix.setLookAtM(
-                viewMatrix,
+                view,
                 0,
+
                 cameraX,
                 cameraY,
                 cameraZ,
+
                 lookX,
-                cameraY,
+                lookY,
                 lookZ,
+
                 0f,
                 1f,
                 0f
         );
-    }
 
-    // ==================================================
-    // MOVEMENT
-    // ==================================================
+        drawGround();
 
-    public synchronized void addMovement(
-            float forward,
-            float side
-    ) {
-
-        targetMoveForward += forward;
-        targetMoveSide += side;
-
-        targetMoveForward =
-                clamp(
-                        targetMoveForward,
-                        -4f,
-                        4f
-                );
-
-        targetMoveSide =
-                clamp(
-                        targetMoveSide,
-                        -4f,
-                        4f
-                );
-    }
-
-    public synchronized void addYaw(float amount) {
-
-        yaw += amount;
-
-        if (yaw > Math.PI * 2f) {
-            yaw -= (float) (Math.PI * 2f);
-        }
-
-        if (yaw < -Math.PI * 2f) {
-            yaw += (float) (Math.PI * 2f);
-        }
-    }
-
-    private synchronized void updateMovement() {
-
-        moveForward +=
-                (targetMoveForward - moveForward)
-                        * MOVEMENT_SMOOTHING;
-
-        moveSide +=
-                (targetMoveSide - moveSide)
-                        * MOVEMENT_SMOOTHING;
-
-        targetMoveForward *= 0.88f;
-        targetMoveSide *= 0.88f;
-
-        float forwardX =
-                (float) Math.sin(yaw);
-
-        float forwardZ =
-                -(float) Math.cos(yaw);
-
-        float rightX =
-                (float) Math.cos(yaw);
-
-        float rightZ =
-                (float) Math.sin(yaw);
-
-        cameraX +=
-                forwardX *
-                moveForward *
-                MOVE_SPEED;
-
-        cameraZ +=
-                forwardZ *
-                moveForward *
-                MOVE_SPEED;
-
-        cameraX +=
-                rightX *
-                moveSide *
-                MOVE_SPEED;
-
-        cameraZ +=
-                rightZ *
-                moveSide *
-                MOVE_SPEED;
-
-        clampCameraPosition();
-    }
-
-    // ==================================================
-    // GROUND
-    // ==================================================
-
-    private void createGround() {
-
-        float size = 1900f;
-
-        float[] vertices = {
-
-                -size, 0f, -size,
-                 size, 0f, -size,
-                -size, 0f,  size,
-
-                 size, 0f, -size,
-                 size, 0f,  size,
-                -size, 0f,  size
-        };
-
-        ByteBuffer buffer =
-                ByteBuffer.allocateDirect(
-                        vertices.length * 4
-                );
-
-        buffer.order(
-                ByteOrder.nativeOrder()
+        // Back area
+        drawTree(
+                -12f,
+                0f,
+                -12f,
+                1.15f
         );
 
-        groundBuffer =
-                buffer.asFloatBuffer();
+        drawTree(
+                -4f,
+                0f,
+                -16f,
+                0.90f
+        );
 
-        groundBuffer.put(vertices);
-        groundBuffer.position(0);
+        drawTree(
+                5f,
+                0f,
+                -14f,
+                1.05f
+        );
+
+        drawTree(
+                14f,
+                0f,
+                -11f,
+                0.95f
+        );
+
+        // Middle area
+        drawTree(
+                -16f,
+                0f,
+                -2f,
+                0.85f
+        );
+
+        drawTree(
+                -7f,
+                0f,
+                -5f,
+                0.72f
+        );
+
+        drawTree(
+                7f,
+                0f,
+                -4f,
+                0.82f
+        );
+
+        drawTree(
+                16f,
+                0f,
+                -1f,
+                1.10f
+        );
+
+        // Far/back side
+        drawTree(
+                -13f,
+                0f,
+                8f,
+                0.95f
+        );
+
+        drawTree(
+                -2f,
+                0f,
+                11f,
+                1.10f
+        );
+
+        drawTree(
+                10f,
+                0f,
+                9f,
+                0.88f
+        );
+
+        drawTree(
+                17f,
+                0f,
+                12f,
+                0.75f
+        );
+
+        // Rocks
+        drawRock(
+                -8f,
+                0.20f,
+                -10f,
+                1.0f,
+                0.65f,
+                0.8f
+        );
+
+        drawRock(
+                2f,
+                0.18f,
+                -9f,
+                0.8f,
+                0.5f,
+                0.7f
+        );
+
+        drawRock(
+                11f,
+                0.22f,
+                -7f,
+                1.1f,
+                0.6f,
+                0.8f
+        );
+
+        drawRock(
+                -12f,
+                0.18f,
+                3f,
+                0.9f,
+                0.5f,
+                0.7f
+        );
+
+        drawRock(
+                5f,
+                0.20f,
+                4f,
+                1.0f,
+                0.55f,
+                0.85f
+        );
+
+        drawRock(
+                14f,
+                0.16f,
+                6f,
+                0.75f,
+                0.45f,
+                0.65f
+        );
     }
+
+    // Movement
+    public void addMovement(
+            float forward,
+            float side) {
+
+        float sin =
+                (float) Math.sin(yaw);
+
+        float cos =
+                (float) Math.cos(yaw);
+
+        // Forward/backward
+        cameraX += sin * forward;
+
+        cameraZ -= cos * forward;
+
+        // Left/right
+        cameraX += cos * side;
+
+        cameraZ += sin * side;
+
+        // Keep player inside map.
+        cameraX =
+                Math.max(
+                        -28f,
+                        Math.min(
+                                28f,
+                                cameraX
+                        )
+                );
+
+        cameraZ =
+                Math.max(
+                        -28f,
+                        Math.min(
+                                28f,
+                                cameraZ
+                        )
+                );
+    }
+
+    // Camera rotation
+    public void addYaw(float amount) {
+        yaw += amount;
+    }
+
+    // --------------------------------------------------
+    // GROUND
+    // --------------------------------------------------
 
     private void drawGround() {
 
-        GLES20.glUseProgram(program);
+        drawCube(
+                0f,
+                -0.08f,
+                0f,
 
-        Matrix.setIdentityM(
-                modelMatrix,
-                0
-        );
+                60f,
+                0.16f,
+                60f,
 
-        buildMVP();
-
-        GLES20.glUniformMatrix4fv(
-                mvpMatrixHandle,
-                1,
-                false,
-                mvpMatrix,
-                0
-        );
-
-        GLES20.glUniform4f(
-                colorHandle,
-                0.24f,
-                0.52f,
+                0.22f,
+                0.55f,
                 0.20f,
-                1.0f
-        );
-
-        groundBuffer.position(0);
-
-        GLES20.glEnableVertexAttribArray(
-                positionHandle
-        );
-
-        GLES20.glVertexAttribPointer(
-                positionHandle,
-                3,
-                GLES20.GL_FLOAT,
-                false,
-                12,
-                groundBuffer
-        );
-
-        GLES20.glDrawArrays(
-                GLES20.GL_TRIANGLES,
-                0,
-                6
-        );
-
-        GLES20.glDisableVertexAttribArray(
-                positionHandle
+                1f
         );
     }
 
-    // ==================================================
-    // CUBE
-    // ==================================================
-
-    private void createCube() {
-
-        float[] vertices = {
-
-                -0.5f,-0.5f, 0.5f,
-                 0.5f,-0.5f, 0.5f,
-                 0.5f, 0.5f, 0.5f,
-
-                -0.5f,-0.5f, 0.5f,
-                 0.5f, 0.5f, 0.5f,
-                -0.5f, 0.5f, 0.5f,
-
-                -0.5f,-0.5f,-0.5f,
-                -0.5f, 0.5f,-0.5f,
-                 0.5f, 0.5f,-0.5f,
-
-                -0.5f,-0.5f,-0.5f,
-                 0.5f, 0.5f,-0.5f,
-                 0.5f,-0.5f,-0.5f,
-
-                -0.5f,-0.5f,-0.5f,
-                -0.5f,-0.5f, 0.5f,
-                -0.5f, 0.5f, 0.5f,
-
-                -0.5f,-0.5f,-0.5f,
-                -0.5f, 0.5f, 0.5f,
-                -0.5f, 0.5f,-0.5f,
-
-                 0.5f,-0.5f,-0.5f,
-                 0.5f, 0.5f,-0.5f,
-                 0.5f, 0.5f, 0.5f,
-
-                 0.5f,-0.5f,-0.5f,
-                 0.5f, 0.5f, 0.5f,
-                 0.5f,-0.5f, 0.5f,
-
-                -0.5f, 0.5f,-0.5f,
-                -0.5f, 0.5f, 0.5f,
-                 0.5f, 0.5f, 0.5f,
-
-                -0.5f, 0.5f,-0.5f,
-                 0.5f, 0.5f, 0.5f,
-                 0.5f, 0.5f,-0.5f,
-
-                -0.5f,-0.5f,-0.5f,
-                 0.5f,-0.5f,-0.5f,
-                 0.5f,-0.5f, 0.5f,
-
-                -0.5f,-0.5f,-0.5f,
-                 0.5f,-0.5f, 0.5f,
-                -0.5f,-0.5f, 0.5f
-        };
-
-        cubeBuffer = createBuffer(vertices);
-    }
-
-    // ==================================================
-    // SPHERE — LEAF SHAPE
-    // ==================================================
-
-    private void createSphere() {
-
-        int latitude = 8;
-        int longitude = 12;
-
-        float[] vertices =
-                new float[
-                        latitude *
-                        longitude *
-                        6 * 3
-                ];
-
-        int index = 0;
-
-        for (int lat = 0; lat < latitude; lat++) {
-
-            float theta1 =
-                    (float) Math.PI *
-                    lat / latitude;
-
-            float theta2 =
-                    (float) Math.PI *
-                    (lat + 1) / latitude;
-
-            for (int lon = 0; lon < longitude; lon++) {
-
-                float phi1 =
-                        (float) (2.0 * Math.PI) *
-                        lon / longitude;
-
-                float phi2 =
-                        (float) (2.0 * Math.PI) *
-                        (lon + 1) / longitude;
-
-                float x1 =
-                        (float)
-                        (Math.sin(theta1) *
-                        Math.cos(phi1));
-
-                float y1 =
-                        (float)
-                        Math.cos(theta1);
-
-                float z1 =
-                        (float)
-                        (Math.sin(theta1) *
-                        Math.sin(phi1));
-
-                float x2 =
-                        (float)
-                        (Math.sin(theta2) *
-                        Math.cos(phi1));
-
-                float y2 =
-                        (float)
-                        Math.cos(theta2);
-
-                float z2 =
-                        (float)
-                        (Math.sin(theta2) *
-                        Math.sin(phi1));
-
-                float x3 =
-                        (float)
-                        (Math.sin(theta2) *
-                        Math.cos(phi2));
-
-                float y3 =
-                        (float)
-                        Math.cos(theta2);
-
-                float z3 =
-                        (float)
-                        (Math.sin(theta2) *
-                        Math.sin(phi2));
-
-                float x4 =
-                        (float)
-                        (Math.sin(theta1) *
-                        Math.cos(phi2));
-
-                float y4 =
-                        (float)
-                        Math.cos(theta1);
-
-                float z4 =
-                        (float)
-                        (Math.sin(theta1) *
-                        Math.sin(phi2));
-
-                vertices[index++] = x1;
-                vertices[index++] = y1;
-                vertices[index++] = z1;
-
-                vertices[index++] = x2;
-                vertices[index++] = y2;
-                vertices[index++] = z2;
-
-                vertices[index++] = x3;
-                vertices[index++] = y3;
-                vertices[index++] = z3;
-
-                vertices[index++] = x1;
-                vertices[index++] = y1;
-                vertices[index++] = z1;
-
-                vertices[index++] = x3;
-                vertices[index++] = y3;
-                vertices[index++] = z3;
-
-                vertices[index++] = x4;
-                vertices[index++] = y4;
-                vertices[index++] = z4;
-            }
-        }
-
-        sphereVertexCount =
-                vertices.length / 3;
-
-        sphereBuffer =
-                createBuffer(vertices);
-    }
-
-    // ==================================================
-    // WORLD OBJECTS
-    // ==================================================
-
-    private void drawWorldObjects() {
-
-        drawTree(-7f, -12f, 1.3f);
-        drawTree(5f, -18f, 1.6f);
-        drawTree(-12f, -28f, 1.8f);
-        drawTree(13f, -35f, 2.0f);
-
-        drawTree(-22f, -48f, 2.4f);
-        drawTree(22f, -55f, 2.5f);
-
-        drawTree(8f, -70f, 2.2f);
-        drawTree(-18f, -78f, 2.0f);
-
-        drawRock(-3f, -9f, 0.8f);
-        drawRock(3f, -15f, 0.6f);
-        drawRock(-8f, -23f, 1.0f);
-        drawRock(10f, -30f, 0.9f);
-
-        drawRock(-16f, -42f, 1.2f);
-        drawRock(17f, -50f, 1.1f);
-    }
-
-    // ==================================================
+    // --------------------------------------------------
     // TREE
-    // ==================================================
+    // --------------------------------------------------
 
     private void drawTree(
             float x,
+            float y,
             float z,
-            float scale
-    ) {
+            float s) {
 
-        // Trunk
+        // Main trunk
         drawCube(
                 x,
-                1.5f * scale,
+                y + 1.35f * s,
                 z,
-                0.65f * scale,
-                3.0f * scale,
-                0.65f * scale,
-                0.34f,
-                0.20f,
-                0.10f,
-                1.0f
+
+                0.62f * s,
+                2.70f * s,
+                0.62f * s,
+
+                0.30f,
+                0.15f,
+                0.07f,
+                1f
         );
 
-        // Main round foliage
+        // Main lower branch
+        drawBranch(
+                x - 0.25f * s,
+                y + 1.65f * s,
+                z,
+
+                0.95f * s,
+                0.16f * s,
+                0.16f * s,
+
+                -28f,
+                0f,
+                -32f
+        );
+
+        // Upper left branch
+        drawBranch(
+                x - 0.18f * s,
+                y + 2.20f * s,
+                z,
+
+                0.75f * s,
+                0.14f * s,
+                0.14f * s,
+
+                24f,
+                0f,
+                38f
+        );
+
+        // Upper right branch
+        drawBranch(
+                x + 0.18f * s,
+                y + 2.30f * s,
+                z,
+
+                0.78f * s,
+                0.14f * s,
+                0.14f * s,
+
+                -22f,
+                0f,
+                -42f
+        );
+
+        // --------------------------------------------------
+        // NATURAL FOLIAGE
+        // --------------------------------------------------
+
+        // Main crown
         drawSphere(
                 x,
-                4.0f * scale,
+                y + 3.15f * s,
                 z,
-                2.2f * scale,
-                2.0f * scale,
-                2.2f * scale,
+
+                1.15f * s,
+
                 0.08f,
+                0.43f,
+                0.09f,
+                1f
+        );
+
+        // Left crown
+        drawSphere(
+                x - 0.72f * s,
+                y + 2.85f * s,
+                z + 0.12f * s,
+
+                0.82f * s,
+
+                0.06f,
+                0.36f,
+                0.07f,
+                1f
+        );
+
+        // Right crown
+        drawSphere(
+                x + 0.75f * s,
+                y + 2.88f * s,
+                z - 0.08f * s,
+
+                0.86f * s,
+
+                0.07f,
+                0.39f,
+                0.08f,
+                1f
+        );
+
+        // Top crown
+        drawSphere(
+                x - 0.20f * s,
+                y + 3.75f * s,
+                z,
+
+                0.78f * s,
+
+                0.09f,
+                0.47f,
+                0.10f,
+                1f
+        );
+
+        // Front/right crown
+        drawSphere(
+                x + 0.48f * s,
+                y + 3.52f * s,
+                z + 0.25f * s,
+
+                0.65f * s,
+
+                0.07f,
                 0.40f,
                 0.08f,
-                1.0f
+                1f
         );
 
-        // Upper foliage
+        // Small lower foliage
         drawSphere(
-                x,
-                5.7f * scale,
-                z,
-                1.7f * scale,
-                1.6f * scale,
-                1.7f * scale,
-                0.10f,
-                0.48f,
-                0.10f,
-                1.0f
-        );
+                x - 0.45f * s,
+                y + 2.55f * s,
+                z - 0.18f * s,
 
-        // Small upper crown
-        drawSphere(
-                x,
-                7.0f * scale,
-                z,
-                1.15f * scale,
-                1.1f * scale,
-                1.15f * scale,
-                0.12f,
-                0.54f,
-                0.12f,
-                1.0f
+                0.55f * s,
+
+                0.055f,
+                0.32f,
+                0.065f,
+                1f
         );
     }
 
-    // ==================================================
-    // SPHERE DRAW
-    // ==================================================
+    // --------------------------------------------------
+    // BRANCH
+    // --------------------------------------------------
 
-    private void drawSphere(
+    private void drawBranch(
             float x,
             float y,
             float z,
-            float scaleX,
-            float scaleY,
-            float scaleZ,
-            float red,
-            float green,
-            float blue,
-            float alpha
-    ) {
 
-        GLES20.glUseProgram(program);
+            float length,
+            float thickness,
+            float depth,
+
+            float rotX,
+            float rotY,
+            float rotZ) {
 
         Matrix.setIdentityM(
-                modelMatrix,
+                model,
                 0
         );
 
         Matrix.translateM(
-                modelMatrix,
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotY,
+                0f,
+                1f,
+                0f
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotZ,
+                0f,
+                0f,
+                1f
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotX,
+                1f,
+                0f,
+                0f
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                length,
+                thickness,
+                depth
+        );
+
+        drawCurrentModel(
+                0.28f,
+                0.13f,
+                0.055f,
+                1f
+        );
+    }
+
+    // --------------------------------------------------
+    // ROCK
+    // --------------------------------------------------
+
+    private void drawRock(
+            float x,
+            float y,
+            float z,
+
+            float sx,
+            float sy,
+            float sz) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                12f,
+                0f,
+                1f,
+                0f
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                -8f,
+                1f,
+                0f,
+                0f
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                sx,
+                sy,
+                sz
+        );
+
+        drawCurrentModel(
+                0.28f,
+                0.28f,
+                0.25f,
+                1f
+        );
+    }
+
+    // --------------------------------------------------
+    // CUBE
+    // --------------------------------------------------
+
+    private void drawCube(
+            float x,
+            float y,
+            float z,
+
+            float sx,
+            float sy,
+            float sz,
+
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
                 0,
                 x,
                 y,
@@ -677,44 +714,156 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
 
         Matrix.scaleM(
-                modelMatrix,
+                model,
                 0,
-                scaleX,
-                scaleY,
-                scaleZ
+                sx,
+                sy,
+                sz
         );
 
-        buildMVP();
+        drawCurrentModel(
+                r,
+                g,
+                b,
+                a
+        );
+    }
 
-        GLES20.glUniformMatrix4fv(
-                mvpMatrixHandle,
-                1,
-                false,
-                mvpMatrix,
+    // --------------------------------------------------
+    // SPHERE
+    // --------------------------------------------------
+
+    private void drawSphere(
+            float x,
+            float y,
+            float z,
+            float scale,
+
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.setIdentityM(
+                model,
                 0
         );
 
-        GLES20.glUniform4f(
-                colorHandle,
-                red,
-                green,
-                blue,
-                alpha
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                scale,
+                scale,
+                scale
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                mvp,
+                0
+        );
+
+        GLES20.glUseProgram(
+                program
+        );
+
+        GLES20.glUniformMatrix4fv(
+                mvpHandle,
+                1,
+                false,
+                mvp,
+                0
         );
 
         sphereBuffer.position(0);
-
-        GLES20.glEnableVertexAttribArray(
-                positionHandle
-        );
 
         GLES20.glVertexAttribPointer(
                 positionHandle,
                 3,
                 GLES20.GL_FLOAT,
                 false,
-                12,
+                3 * 4,
                 sphereBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
+
+        float[] colors =
+                new float[
+                        sphereVertexCount * 4
+                ];
+
+        for (
+                int i = 0;
+                i < sphereVertexCount;
+                i++
+        ) {
+
+            float shade =
+                    0.82f +
+                    0.18f *
+                    ((i % 7) / 6f);
+
+            colors[i * 4] =
+                    r * shade;
+
+            colors[i * 4 + 1] =
+                    g * shade;
+
+            colors[i * 4 + 2] =
+                    b * shade;
+
+            colors[i * 4 + 3] =
+                    a;
+        }
+
+        FloatBuffer colorBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                colors.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        colorBuffer
+                .put(colors)
+                .position(0);
+
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                colorBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                colorHandle
         );
 
         GLES20.glDrawArrays(
@@ -726,103 +875,121 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         GLES20.glDisableVertexAttribArray(
                 positionHandle
         );
-    }
 
-    // ==================================================
-    // ROCK
-    // ==================================================
-
-    private void drawRock(
-            float x,
-            float z,
-            float scale
-    ) {
-
-        drawCube(
-                x,
-                0.45f * scale,
-                z,
-                1.8f * scale,
-                0.9f * scale,
-                1.4f * scale,
-                0.34f,
-                0.34f,
-                0.31f,
-                1.0f
+        GLES20.glDisableVertexAttribArray(
+                colorHandle
         );
     }
 
-    // ==================================================
-    // CUBE DRAW
-    // ==================================================
+    // --------------------------------------------------
+    // DRAW CURRENT MODEL
+    // --------------------------------------------------
 
-    private void drawCube(
-            float x,
-            float y,
-            float z,
-            float scaleX,
-            float scaleY,
-            float scaleZ,
-            float red,
-            float green,
-            float blue,
-            float alpha
-    ) {
+    private void drawCurrentModel(
+            float r,
+            float g,
+            float b,
+            float a) {
 
-        GLES20.glUseProgram(program);
-
-        Matrix.setIdentityM(
-                modelMatrix,
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
                 0
         );
 
-        Matrix.translateM(
-                modelMatrix,
+        Matrix.multiplyMM(
+                mvp,
                 0,
-                x,
-                y,
-                z
+                projection,
+                0,
+                mvp,
+                0
         );
 
-        Matrix.scaleM(
-                modelMatrix,
-                0,
-                scaleX,
-                scaleY,
-                scaleZ
+        GLES20.glUseProgram(
+                program
         );
-
-        buildMVP();
 
         GLES20.glUniformMatrix4fv(
-                mvpMatrixHandle,
+                mvpHandle,
                 1,
                 false,
-                mvpMatrix,
+                mvp,
                 0
-        );
-
-        GLES20.glUniform4f(
-                colorHandle,
-                red,
-                green,
-                blue,
-                alpha
         );
 
         cubeBuffer.position(0);
-
-        GLES20.glEnableVertexAttribArray(
-                positionHandle
-        );
 
         GLES20.glVertexAttribPointer(
                 positionHandle,
                 3,
                 GLES20.GL_FLOAT,
                 false,
-                12,
+                3 * 4,
                 cubeBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
+
+        float[] colorData =
+                new float[
+                        36 * 4
+                ];
+
+        for (
+                int i = 0;
+                i < 36;
+                i++
+        ) {
+
+            float shade =
+                    0.86f +
+                    0.14f *
+                    ((i % 6) / 5f);
+
+            colorData[i * 4] =
+                    r * shade;
+
+            colorData[i * 4 + 1] =
+                    g * shade;
+
+            colorData[i * 4 + 2] =
+                    b * shade;
+
+            colorData[i * 4 + 3] =
+                    a;
+        }
+
+        FloatBuffer colorBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                colorData.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        colorBuffer
+                .put(colorData)
+                .position(0);
+
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                colorBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                colorHandle
         );
 
         GLES20.glDrawArrays(
@@ -834,103 +1001,258 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         GLES20.glDisableVertexAttribArray(
                 positionHandle
         );
-    }
 
-    // ==================================================
-    // BUFFER
-    // ==================================================
-
-    private FloatBuffer createBuffer(
-            float[] vertices
-    ) {
-
-        ByteBuffer buffer =
-                ByteBuffer.allocateDirect(
-                        vertices.length * 4
-                );
-
-        buffer.order(
-                ByteOrder.nativeOrder()
-        );
-
-        FloatBuffer result =
-                buffer.asFloatBuffer();
-
-        result.put(vertices);
-        result.position(0);
-
-        return result;
-    }
-
-    // ==================================================
-    // MVP
-    // ==================================================
-
-    private void buildMVP() {
-
-        Matrix.multiplyMM(
-                mvpMatrix,
-                0,
-                viewMatrix,
-                0,
-                modelMatrix,
-                0
-        );
-
-        Matrix.multiplyMM(
-                mvpMatrix,
-                0,
-                projectionMatrix,
-                0,
-                mvpMatrix,
-                0
+        GLES20.glDisableVertexAttribArray(
+                colorHandle
         );
     }
 
-    // ==================================================
-    // LIMITS
-    // ==================================================
+    // --------------------------------------------------
+    // CUBE GEOMETRY
+    // --------------------------------------------------
 
-    private void clampCameraPosition() {
+    private void createCube() {
 
-        cameraX =
-                clamp(
-                        cameraX,
-                        WORLD_LEFT,
-                        WORLD_RIGHT
-                );
+        float[] vertices = {
 
-        cameraZ =
-                clamp(
-                        cameraZ,
-                        WORLD_FRONT,
-                        WORLD_BACK
-                );
+                // Front
+                -0.5f,-0.5f, 0.5f,
+                 0.5f,-0.5f, 0.5f,
+                 0.5f, 0.5f, 0.5f,
+
+                -0.5f,-0.5f, 0.5f,
+                 0.5f, 0.5f, 0.5f,
+                -0.5f, 0.5f, 0.5f,
+
+                // Back
+                 0.5f,-0.5f,-0.5f,
+                -0.5f,-0.5f,-0.5f,
+                -0.5f, 0.5f,-0.5f,
+
+                 0.5f,-0.5f,-0.5f,
+                -0.5f, 0.5f,-0.5f,
+                 0.5f, 0.5f,-0.5f,
+
+                // Top
+                -0.5f, 0.5f, 0.5f,
+                 0.5f, 0.5f, 0.5f,
+                 0.5f, 0.5f,-0.5f,
+
+                -0.5f, 0.5f, 0.5f,
+                 0.5f, 0.5f,-0.5f,
+                -0.5f, 0.5f,-0.5f,
+
+                // Bottom
+                -0.5f,-0.5f,-0.5f,
+                 0.5f,-0.5f,-0.5f,
+                 0.5f,-0.5f, 0.5f,
+
+                -0.5f,-0.5f,-0.5f,
+                 0.5f,-0.5f, 0.5f,
+                -0.5f,-0.5f, 0.5f,
+
+                // Right
+                 0.5f,-0.5f, 0.5f,
+                 0.5f,-0.5f,-0.5f,
+                 0.5f, 0.5f,-0.5f,
+
+                 0.5f,-0.5f, 0.5f,
+                 0.5f, 0.5f,-0.5f,
+                 0.5f, 0.5f, 0.5f,
+
+                // Left
+                -0.5f,-0.5f,-0.5f,
+                -0.5f,-0.5f, 0.5f,
+                -0.5f, 0.5f, 0.5f,
+
+                -0.5f,-0.5f,-0.5f,
+                -0.5f, 0.5f, 0.5f,
+                -0.5f, 0.5f,-0.5f
+        };
+
+        cubeBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        cubeBuffer
+                .put(vertices)
+                .position(0);
     }
 
-    private float clamp(
-            float value,
-            float minimum,
-            float maximum
-    ) {
+    // --------------------------------------------------
+    // SPHERE GEOMETRY
+    // --------------------------------------------------
 
-        return Math.max(
-                minimum,
-                Math.min(
-                        maximum,
-                        value
-                )
-        );
+    private void createSphere(
+            int stacks,
+            int slices) {
+
+        float[] vertices =
+                new float[
+                        stacks *
+                        slices *
+                        6 *
+                        3
+                ];
+
+        int index = 0;
+
+        for (
+                int i = 0;
+                i < stacks;
+                i++
+        ) {
+
+            float v0 =
+                    (float) i /
+                    stacks;
+
+            float v1 =
+                    (float) (i + 1) /
+                    stacks;
+
+            float phi0 =
+                    (float)
+                    (Math.PI * v0);
+
+            float phi1 =
+                    (float)
+                    (Math.PI * v1);
+
+            for (
+                    int j = 0;
+                    j < slices;
+                    j++
+            ) {
+
+                float u0 =
+                        (float) j /
+                        slices;
+
+                float u1 =
+                        (float) (j + 1) /
+                        slices;
+
+                float theta0 =
+                        (float)
+                        (2.0 *
+                        Math.PI *
+                        u0);
+
+                float theta1 =
+                        (float)
+                        (2.0 *
+                        Math.PI *
+                        u1);
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi0,
+                                theta0
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi1,
+                                theta0
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi1,
+                                theta1
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi0,
+                                theta0
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi1,
+                                theta1
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi0,
+                                theta1
+                        );
+            }
+        }
+
+        sphereVertexCount =
+                index / 3;
+
+        sphereBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        sphereBuffer
+                .put(vertices)
+                .position(0);
     }
 
-    // ==================================================
-    // SHADERS
-    // ==================================================
+    private int putSphereVertex(
+            float[] data,
+            int index,
+            float phi,
+            float theta) {
+
+        float sinPhi =
+                (float)
+                Math.sin(phi);
+
+        data[index++] =
+                sinPhi *
+                (float)
+                Math.cos(theta);
+
+        data[index++] =
+                (float)
+                Math.cos(phi);
+
+        data[index++] =
+                sinPhi *
+                (float)
+                Math.sin(theta);
+
+        return index;
+    }
+
+    // --------------------------------------------------
+    // SHADER
+    // --------------------------------------------------
 
     private int loadShader(
             int type,
-            String shaderCode
-    ) {
+            String shaderCode) {
 
         int shader =
                 GLES20.glCreateShader(type);
@@ -940,45 +1262,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 shaderCode
         );
 
-        GLES20.glCompileShader(shader);
+        GLES20.glCompileShader(
+                shader
+        );
 
         return shader;
     }
-
-    private int createProgram(
-            String vertexShaderCode,
-            String fragmentShaderCode
-    ) {
-
-        int vertexShader =
-                loadShader(
-                        GLES20.GL_VERTEX_SHADER,
-                        vertexShaderCode
-                );
-
-        int fragmentShader =
-                loadShader(
-                        GLES20.GL_FRAGMENT_SHADER,
-                        fragmentShaderCode
-                );
-
-        int createdProgram =
-                GLES20.glCreateProgram();
-
-        GLES20.glAttachShader(
-                createdProgram,
-                vertexShader
-        );
-
-        GLES20.glAttachShader(
-                createdProgram,
-                fragmentShader
-        );
-
-        GLES20.glLinkProgram(
-                createdProgram
-        );
-
-        return createdProgram;
-    }
-    }
+            }
