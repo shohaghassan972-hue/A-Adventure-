@@ -45,8 +45,20 @@ jobs:
       - name: Build release APK
         run: ./gradlew assembleRelease
 
+      - name: Find APK
+        id: apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk -type f -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "APK not found"
+            exit 1
+          fi
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found APK: $APK_PATH"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: A-Adventure-0.1.1v-release
-          path: app/build/outputs/apk/release/app-release.apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
