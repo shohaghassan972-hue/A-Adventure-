@@ -23,25 +23,38 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int sphereVertexCount;
     private int rockVertexCount;
 
-    // World shader
+    // ======================================================
+    // WORLD SHADER
+    // ======================================================
+
     private int program;
     private int positionHandle;
     private int colorHandle;
     private int mvpHandle;
 
-    // Sky shader
+    // ======================================================
+    // SKY SHADER
+    // ======================================================
+
     private int skyProgram;
     private int skyPositionHandle;
     private int skyAspectHandle;
 
     private float skyAspect = 1f;
 
-    // First-person camera
+    // ======================================================
+    // FIRST PERSON CAMERA
+    // ======================================================
+
     private float cameraX = 0f;
     private float cameraY = 1.7f;
     private float cameraZ = 8f;
 
     private float yaw = 0f;
+
+    // ======================================================
+    // SURFACE CREATED
+    // ======================================================
 
     @Override
     public void onSurfaceCreated(
@@ -60,7 +73,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
 
         // ==================================================
-        // WORLD SHADER
+        // WORLD VERTEX SHADER
         // ==================================================
 
         String vertexShaderCode =
@@ -68,14 +81,20 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "attribute vec4 aColor;" +
                 "uniform mat4 uMVP;" +
                 "varying vec4 vColor;" +
+
                 "void main() {" +
                 "    gl_Position = uMVP * aPosition;" +
                 "    vColor = aColor;" +
                 "}";
 
+        // ==================================================
+        // WORLD FRAGMENT SHADER
+        // ==================================================
+
         String fragmentShaderCode =
                 "precision mediump float;" +
                 "varying vec4 vColor;" +
+
                 "void main() {" +
                 "    gl_FragColor = vColor;" +
                 "}";
@@ -128,7 +147,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 );
 
         // ==================================================
-        // SKY + SUN SHADER
+        // SKY VERTEX SHADER
         // ==================================================
 
         String skyVertexShaderCode =
@@ -146,6 +165,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
                 "}";
 
+        // ==================================================
+        // SKY + SUN + CLOUD SHADER
+        // ==================================================
+
         String skyFragmentShaderCode =
                 "precision mediump float;" +
 
@@ -156,9 +179,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
                 "void main() {" +
 
-                "    // --------------------------------" +
-                "    // Sky gradient" +
-                "    // --------------------------------" +
+                // ------------------------------------------
+                // SKY GRADIENT
+                // ------------------------------------------
 
                 "    float t = clamp(" +
                 "        (vSkyY + 1.0) * 0.5," +
@@ -179,9 +202,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "            t" +
                 "        );" +
 
-                "    // --------------------------------" +
-                "    // Sun position" +
-                "    // --------------------------------" +
+                // ------------------------------------------
+                // SUN POSITION
+                // ------------------------------------------
 
                 "    vec2 sunPosition =" +
                 "        vec2(0.76, 0.72);" +
@@ -195,9 +218,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "    float distanceToSun =" +
                 "        length(sunPoint);" +
 
-                "    // --------------------------------" +
-                "    // Natural sun glow" +
-                "    // --------------------------------" +
+                // ------------------------------------------
+                // SUN GLOW
+                // ------------------------------------------
 
                 "    float outerGlow =" +
                 "        1.0 - smoothstep(" +
@@ -215,9 +238,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "    skyColor +=" +
                 "        glowColor * outerGlow * 0.24;" +
 
-                "    // --------------------------------" +
-                "    // Sun disc" +
-                "    // --------------------------------" +
+                // ------------------------------------------
+                // SUN DISC
+                // ------------------------------------------
 
                 "    float sunDisc =" +
                 "        1.0 - smoothstep(" +
@@ -235,6 +258,165 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "            sunColor," +
                 "            sunDisc" +
                 "        );" +
+
+                // ==================================================
+                // CLOUD GROUP 1
+                // ==================================================
+
+                "    vec2 cloudUV =" +
+                "        vUV;" +
+
+                "    cloudUV.x *=" +
+                "        uAspect;" +
+
+                "    float cloudMask = 0.0;" +
+
+                // Cloud puff 1
+                "    vec2 c1 =" +
+                "        cloudUV - vec2(0.30, 0.68);" +
+
+                "    float cloud1 =" +
+                "        1.0 - smoothstep(" +
+                "            0.045," +
+                "            0.105," +
+                "            length(c1 * vec2(1.45, 0.65))" +
+                "        );" +
+
+                // Cloud puff 2
+                "    vec2 c2 =" +
+                "        cloudUV - vec2(0.37, 0.70);" +
+
+                "    float cloud2 =" +
+                "        1.0 - smoothstep(" +
+                "            0.040," +
+                "            0.095," +
+                "            length(c2 * vec2(1.25, 0.70))" +
+                "        );" +
+
+                // Cloud puff 3
+                "    vec2 c3 =" +
+                "        cloudUV - vec2(0.44, 0.68);" +
+
+                "    float cloud3 =" +
+                "        1.0 - smoothstep(" +
+                "            0.050," +
+                "            0.110," +
+                "            length(c3 * vec2(1.50, 0.65))" +
+                "        );" +
+
+                "    cloudMask =" +
+                "        max(" +
+                "            cloudMask," +
+                "            max(cloud1, max(cloud2, cloud3))" +
+                "        );" +
+
+                // ==================================================
+                // CLOUD GROUP 2
+                // ==================================================
+
+                "    vec2 c4 =" +
+                "        cloudUV - vec2(0.62, 0.58);" +
+
+                "    float cloud4 =" +
+                "        1.0 - smoothstep(" +
+                "            0.045," +
+                "            0.105," +
+                "            length(c4 * vec2(1.55, 0.70))" +
+                "        );" +
+
+                "    vec2 c5 =" +
+                "        cloudUV - vec2(0.69, 0.61);" +
+
+                "    float cloud5 =" +
+                "        1.0 - smoothstep(" +
+                "            0.040," +
+                "            0.095," +
+                "            length(c5 * vec2(1.30, 0.65))" +
+                "        );" +
+
+                "    vec2 c6 =" +
+                "        cloudUV - vec2(0.76, 0.58);" +
+
+                "    float cloud6 =" +
+                "        1.0 - smoothstep(" +
+                "            0.050," +
+                "            0.115," +
+                "            length(c6 * vec2(1.45, 0.68))" +
+                "        );" +
+
+                "    cloudMask =" +
+                "        max(" +
+                "            cloudMask," +
+                "            max(cloud4, cloud5)" +
+                "        );" +
+
+                "    cloudMask =" +
+                "        max(" +
+                "            cloudMask," +
+                "            cloud6" +
+                "        );" +
+
+                // ==================================================
+                // CLOUD GROUP 3
+                // ==================================================
+
+                "    vec2 c7 =" +
+                "        cloudUV - vec2(0.16, 0.50);" +
+
+                "    float cloud7 =" +
+                "        1.0 - smoothstep(" +
+                "            0.045," +
+                "            0.105," +
+                "            length(c7 * vec2(1.40, 0.65))" +
+                "        );" +
+
+                "    vec2 c8 =" +
+                "        cloudUV - vec2(0.23, 0.52);" +
+
+                "    float cloud8 =" +
+                "        1.0 - smoothstep(" +
+                "            0.040," +
+                "            0.095," +
+                "            length(c8 * vec2(1.25, 0.68))" +
+                "        );" +
+
+                "    cloudMask =" +
+                "        max(" +
+                "            cloudMask," +
+                "            max(cloud7, cloud8)" +
+                "        );" +
+
+                // ------------------------------------------
+                // SOFT CLOUD EDGES
+                // ------------------------------------------
+
+                "    cloudMask =" +
+                "        smoothstep(" +
+                "            0.10," +
+                "            0.88," +
+                "            cloudMask" +
+                "        );" +
+
+                // ------------------------------------------
+                // CLOUD COLOR
+                // ------------------------------------------
+
+                "    vec3 cloudColor =" +
+                "        vec3(0.97, 0.985, 1.0);" +
+
+                "    float cloudAlpha =" +
+                "        cloudMask * 0.72;" +
+
+                "    skyColor =" +
+                "        mix(" +
+                "            skyColor," +
+                "            cloudColor," +
+                "            cloudAlpha" +
+                "        );" +
+
+                // ------------------------------------------
+                // FINAL SKY
+                // ------------------------------------------
 
                 "    gl_FragColor =" +
                 "        vec4(skyColor, 1.0);" +
@@ -282,6 +464,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         "uAspect"
                 );
 
+        // ==================================================
+        // CREATE GEOMETRY
+        // ==================================================
+
         createSky();
 
         createCube();
@@ -295,7 +481,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     }
 
     // ======================================================
-    // SURFACE
+    // SURFACE CHANGED
     // ======================================================
 
     @Override
@@ -342,7 +528,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
-        // Sky + sun first
+        // Sky + sun + clouds
         drawSky();
 
         GLES20.glEnable(
@@ -377,64 +563,161 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0f
         );
 
+        // ==================================================
+        // GROUND
+        // ==================================================
+
         drawGround();
 
         // ==================================================
         // TREES
         // ==================================================
 
-        drawTree(-12f, 0f, -12f, 1.15f);
-        drawTree(-4f, 0f, -16f, 0.90f);
-        drawTree(5f, 0f, -14f, 1.05f);
-        drawTree(14f, 0f, -11f, 0.95f);
+        drawTree(
+                -12f,
+                0f,
+                -12f,
+                1.15f
+        );
 
-        drawTree(-16f, 0f, -2f, 0.85f);
-        drawTree(-7f, 0f, -5f, 0.72f);
-        drawTree(7f, 0f, -4f, 0.82f);
-        drawTree(16f, 0f, -1f, 1.10f);
+        drawTree(
+                -4f,
+                0f,
+                -16f,
+                0.90f
+        );
 
-        drawTree(-13f, 0f, 8f, 0.95f);
-        drawTree(-2f, 0f, 11f, 1.10f);
-        drawTree(10f, 0f, 9f, 0.88f);
-        drawTree(17f, 0f, 12f, 0.75f);
+        drawTree(
+                5f,
+                0f,
+                -14f,
+                1.05f
+        );
+
+        drawTree(
+                14f,
+                0f,
+                -11f,
+                0.95f
+        );
+
+        drawTree(
+                -16f,
+                0f,
+                -2f,
+                0.85f
+        );
+
+        drawTree(
+                -7f,
+                0f,
+                -5f,
+                0.72f
+        );
+
+        drawTree(
+                7f,
+                0f,
+                -4f,
+                0.82f
+        );
+
+        drawTree(
+                16f,
+                0f,
+                -1f,
+                1.10f
+        );
+
+        drawTree(
+                -13f,
+                0f,
+                8f,
+                0.95f
+        );
+
+        drawTree(
+                -2f,
+                0f,
+                11f,
+                1.10f
+        );
+
+        drawTree(
+                10f,
+                0f,
+                9f,
+                0.88f
+        );
+
+        drawTree(
+                17f,
+                0f,
+                12f,
+                0.75f
+        );
 
         // ==================================================
         // ROCKS
         // ==================================================
 
         drawRock(
-                -8f, 0f, -10f,
-                1.0f, 0.65f, 0.8f,
+                -8f,
+                0f,
+                -10f,
+                1.0f,
+                0.65f,
+                0.8f,
                 8f
         );
 
         drawRock(
-                2f, 0f, -9f,
-                0.75f, 0.48f, 0.65f,
+                2f,
+                0f,
+                -9f,
+                0.75f,
+                0.48f,
+                0.65f,
                 -12f
         );
 
         drawRock(
-                11f, 0f, -7f,
-                1.15f, 0.62f, 0.82f,
+                11f,
+                0f,
+                -7f,
+                1.15f,
+                0.62f,
+                0.82f,
                 18f
         );
 
         drawRock(
-                -12f, 0f, 3f,
-                0.90f, 0.52f, 0.70f,
+                -12f,
+                0f,
+                3f,
+                0.90f,
+                0.52f,
+                0.70f,
                 -20f
         );
 
         drawRock(
-                5f, 0f, 4f,
-                1.0f, 0.55f, 0.85f,
+                5f,
+                0f,
+                4f,
+                1.0f,
+                0.55f,
+                0.85f,
                 10f
         );
 
         drawRock(
-                14f, 0f, 6f,
-                0.78f, 0.45f, 0.68f,
+                14f,
+                0f,
+                6f,
+                0.78f,
+                0.45f,
+                0.68f,
                 -15f
         );
     }
@@ -703,7 +986,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x,
                 y + 3.15f * s,
                 z,
+
                 1.15f * s,
+
                 0.08f,
                 0.43f,
                 0.09f,
@@ -714,7 +999,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x - 0.72f * s,
                 y + 2.85f * s,
                 z + 0.12f * s,
+
                 0.82f * s,
+
                 0.06f,
                 0.36f,
                 0.07f,
@@ -725,7 +1012,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x + 0.75f * s,
                 y + 2.88f * s,
                 z - 0.08f * s,
+
                 0.86f * s,
+
                 0.07f,
                 0.39f,
                 0.08f,
@@ -736,7 +1025,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x - 0.20f * s,
                 y + 3.75f * s,
                 z,
+
                 0.78f * s,
+
                 0.09f,
                 0.47f,
                 0.10f,
@@ -747,7 +1038,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x + 0.48f * s,
                 y + 3.52f * s,
                 z + 0.25f * s,
+
                 0.65f * s,
+
                 0.07f,
                 0.40f,
                 0.08f,
@@ -758,7 +1051,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x - 0.45f * s,
                 y + 2.55f * s,
                 z - 0.18f * s,
+
                 0.55f * s,
+
                 0.055f,
                 0.32f,
                 0.065f,
@@ -1577,7 +1872,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.03f
         };
 
-        // Top
+        // ==================================================
+        // TOP
+        // ==================================================
+
         for (
                 int i = 0;
                 i < sides;
@@ -1641,7 +1939,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     );
         }
 
-        // Middle
+        // ==================================================
+        // MIDDLE
+        // ==================================================
+
         for (
                 int i = 0;
                 i < sides;
@@ -1762,7 +2063,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     );
         }
 
-        // Bottom
+        // ==================================================
+        // BOTTOM
+        // ==================================================
+
         for (
                 int i = 0;
                 i < sides;
@@ -1842,6 +2146,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 .position(0);
     }
 
+    // ======================================================
+    // PUT VERTEX
+    // ======================================================
+
     private int putVertex(
             float[] data,
             int index,
@@ -1878,4 +2186,4 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         return shader;
     }
-            }
+    }
