@@ -23,6 +23,7 @@ public class WorldView extends GLSurfaceView {
 
         setRenderer(renderer);
 
+        // Render continuously for smooth movement and camera.
         setRenderMode(
                 GLSurfaceView.RENDERMODE_CONTINUOUSLY
         );
@@ -50,9 +51,12 @@ public class WorldView extends GLSurfaceView {
                  * Right side = camera looking.
                  */
                 if (x < getWidth() * 0.45f) {
+
                     movingTouch = true;
                     lookingTouch = false;
+
                 } else {
+
                     lookingTouch = true;
                     movingTouch = false;
                 }
@@ -67,7 +71,7 @@ public class WorldView extends GLSurfaceView {
                 if (movingTouch) {
 
                     /*
-                     * Swipe direction controls movement.
+                     * Movement
                      *
                      * Up    = forward
                      * Down  = backward
@@ -75,8 +79,11 @@ public class WorldView extends GLSurfaceView {
                      * Right = strafe right
                      */
 
-                    float moveForward = -dy * 0.035f;
-                    float moveSide = dx * 0.035f;
+                    float moveForward =
+                            -dy * 0.035f;
+
+                    float moveSide =
+                            dx * 0.035f;
 
                     renderer.addMovement(
                             moveForward,
@@ -87,9 +94,15 @@ public class WorldView extends GLSurfaceView {
                 if (lookingTouch) {
 
                     /*
-                     * Horizontal drag rotates camera.
+                     * Camera sensitivity
+                     *
+                     * Previous: 0.008
+                     * New:      0.004
+                     *
+                     * Sensitivity reduced by 50%.
                      */
-                    float turnAmount = dx * 0.008f;
+                    float turnAmount =
+                            dx * 0.004f;
 
                     renderer.addYaw(
                             turnAmount
