@@ -22,10 +22,18 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int sphereVertexCount;
     private int rockVertexCount;
 
+    // Main world shader
     private int program;
     private int positionHandle;
     private int colorHandle;
     private int mvpHandle;
+
+    // Sky shader
+    private int skyProgram;
+    private int skyPositionHandle;
+    private int skyMvpHandle;
+
+    private FloatBuffer skyBuffer;
 
     // First-person camera
     private float cameraX = 0f;
@@ -40,13 +48,19 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             javax.microedition.khronos.egl.EGLConfig config) {
 
         GLES20.glClearColor(
-                0.38f,
-                0.67f,
-                0.88f,
+                0.55f,
+                0.75f,
+                0.90f,
                 1f
         );
 
-        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+        GLES20.glEnable(
+                GLES20.GL_DEPTH_TEST
+        );
+
+        // ==================================================
+        // WORLD SHADER
+        // ==================================================
 
         String vertexShaderCode =
                 "attribute vec4 aPosition;" +
@@ -65,17 +79,20 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "    gl_FragColor = vColor;" +
                 "}";
 
-        int vertexShader = loadShader(
-                GLES20.GL_VERTEX_SHADER,
-                vertexShaderCode
-        );
+        int vertexShader =
+                loadShader(
+                        GLES20.GL_VERTEX_SHADER,
+                        vertexShaderCode
+                );
 
-        int fragmentShader = loadShader(
-                GLES20.GL_FRAGMENT_SHADER,
-                fragmentShaderCode
-        );
+        int fragmentShader =
+                loadShader(
+                        GLES20.GL_FRAGMENT_SHADER,
+                        fragmentShaderCode
+                );
 
-        program = GLES20.glCreateProgram();
+        program =
+                GLES20.glCreateProgram();
 
         GLES20.glAttachShader(
                 program,
@@ -87,7 +104,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 fragmentShader
         );
 
-        GLES20.glLinkProgram(program);
+        GLES20.glLinkProgram(
+                program
+        );
 
         positionHandle =
                 GLES20.glGetAttribLocation(
@@ -107,6 +126,85 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         "uMVP"
                 );
 
+        // ==================================================
+        // SKY SHADER
+        // ==================================================
+
+        String skyVertexShaderCode =
+                "attribute vec4 aPosition;" +
+                "varying float vSkyY;" +
+                "void main() {" +
+                "    gl_Position = aPosition;" +
+                "    vSkyY = aPosition.y;" +
+                "}";
+
+        String skyFragmentShaderCode =
+                "precision mediump float;" +
+                "varying float vSkyY;" +
+
+                "void main() {" +
+
+                "    float t = clamp(" +
+                "        (vSkyY + 1.0) * 0.5," +
+                "        0.0," +
+                "        1.0" +
+                "    );" +
+
+                "    vec3 horizonColor =" +
+                "        vec3(0.58, 0.78, 0.92);" +
+
+                "    vec3 upperColor =" +
+                "        vec3(0.20, 0.48, 0.78);" +
+
+                "    vec3 skyColor =" +
+                "        mix(" +
+                "            horizonColor," +
+                "            upperColor," +
+                "            t" +
+                "        );" +
+
+                "    gl_FragColor =" +
+                "        vec4(skyColor, 1.0);" +
+
+                "}";
+
+        int skyVertexShader =
+                loadShader(
+                        GLES20.GL_VERTEX_SHADER,
+                        skyVertexShaderCode
+                );
+
+        int skyFragmentShader =
+                loadShader(
+                        GLES20.GL_FRAGMENT_SHADER,
+                        skyFragmentShaderCode
+                );
+
+        skyProgram =
+                GLES20.glCreateProgram();
+
+        GLES20.glAttachShader(
+                skyProgram,
+                skyVertexShader
+        );
+
+        GLES20.glAttachShader(
+                skyProgram,
+                skyFragmentShader
+        );
+
+        GLES20.glLinkProgram(
+                skyProgram
+        );
+
+        skyPositionHandle =
+                GLES20.glGetAttribLocation(
+                        skyProgram,
+                        "aPosition"
+                );
+
+        createSky();
+
         createCube();
 
         createSphere(
@@ -114,9 +212,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 12
         );
 
-        // New irregular 3D rock geometry
         createRock();
     }
+
+    // ======================================================
+    // SURFACE
+    // ======================================================
 
     @Override
     public void onSurfaceChanged(
@@ -145,6 +246,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
+    // ======================================================
+    // DRAW FRAME
+    // ======================================================
+
     @Override
     public void onDrawFrame(
             javax.microedition.khronos.opengles.GL10 gl) {
@@ -152,6 +257,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         GLES20.glClear(
                 GLES20.GL_COLOR_BUFFER_BIT |
                 GLES20.GL_DEPTH_BUFFER_BIT
+        );
+
+        // Realistic sky gradient first
+        drawSky();
+
+        // Enable depth for the 3D world
+        GLES20.glEnable(
+                GLES20.GL_DEPTH_TEST
         );
 
         float lookX =
@@ -184,9 +297,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         drawGround();
 
-        // --------------------------------------------------
+        // ==================================================
         // TREES
-        // --------------------------------------------------
+        // ==================================================
 
         drawTree(
                 -12f,
@@ -272,9 +385,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.75f
         );
 
-        // --------------------------------------------------
-        // REALISTIC ROCKS
-        // --------------------------------------------------
+        // ==================================================
+        // ROCKS
+        // ==================================================
 
         drawRock(
                 -8f,
@@ -337,9 +450,73 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
+    // ======================================================
+    // SKY
+    // ======================================================
+
+    private void createSky() {
+
+        float[] vertices = {
+
+                -1f, -1f, 0f,
+                 3f, -1f, 0f,
+                -1f,  3f, 0f
+        };
+
+        skyBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        skyBuffer
+                .put(vertices)
+                .position(0);
+    }
+
+    private void drawSky() {
+
+        GLES20.glDisable(
+                GLES20.GL_DEPTH_TEST
+        );
+
+        GLES20.glUseProgram(
+                skyProgram
+        );
+
+        skyBuffer.position(0);
+
+        GLES20.glVertexAttribPointer(
+                skyPositionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                3 * 4,
+                skyBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                skyPositionHandle
+        );
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                3
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                skyPositionHandle
+        );
+    }
+
+    // ======================================================
     // MOVEMENT
-    // --------------------------------------------------
+    // ======================================================
 
     public void addMovement(
             float forward,
@@ -351,11 +528,17 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         float cos =
                 (float) Math.cos(yaw);
 
-        cameraX += sin * forward;
-        cameraZ -= cos * forward;
+        cameraX +=
+                sin * forward;
 
-        cameraX += cos * side;
-        cameraZ += sin * side;
+        cameraZ -=
+                cos * forward;
+
+        cameraX +=
+                cos * side;
+
+        cameraZ +=
+                sin * side;
 
         cameraX =
                 Math.max(
@@ -376,17 +559,19 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 );
     }
 
-    // --------------------------------------------------
+    // ======================================================
     // CAMERA
-    // --------------------------------------------------
+    // ======================================================
 
-    public void addYaw(float amount) {
+    public void addYaw(
+            float amount) {
+
         yaw += amount;
     }
 
-    // --------------------------------------------------
+    // ======================================================
     // GROUND
-    // --------------------------------------------------
+    // ======================================================
 
     private void drawGround() {
 
@@ -406,9 +591,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
+    // ======================================================
     // TREE
-    // --------------------------------------------------
+    // ======================================================
 
     private void drawTree(
             float x,
@@ -416,7 +601,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             float z,
             float s) {
 
-        // Main trunk
         drawCube(
                 x,
                 y + 1.35f * s,
@@ -432,7 +616,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Lower branch
         drawBranch(
                 x - 0.25f * s,
                 y + 1.65f * s,
@@ -447,7 +630,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 -32f
         );
 
-        // Upper left branch
         drawBranch(
                 x - 0.18f * s,
                 y + 2.20f * s,
@@ -462,7 +644,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 38f
         );
 
-        // Upper right branch
         drawBranch(
                 x + 0.18f * s,
                 y + 2.30f * s,
@@ -477,7 +658,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 -42f
         );
 
-        // Main crown
         drawSphere(
                 x,
                 y + 3.15f * s,
@@ -491,7 +671,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Left crown
         drawSphere(
                 x - 0.72f * s,
                 y + 2.85f * s,
@@ -505,7 +684,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Right crown
         drawSphere(
                 x + 0.75f * s,
                 y + 2.88f * s,
@@ -519,7 +697,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Top crown
         drawSphere(
                 x - 0.20f * s,
                 y + 3.75f * s,
@@ -533,7 +710,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Front/right crown
         drawSphere(
                 x + 0.48f * s,
                 y + 3.52f * s,
@@ -547,7 +723,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Lower foliage
         drawSphere(
                 x - 0.45f * s,
                 y + 2.55f * s,
@@ -562,9 +737,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
+    // ======================================================
     // BRANCH
-    // --------------------------------------------------
+    // ======================================================
 
     private void drawBranch(
             float x,
@@ -635,17 +810,19 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
-    // REALISTIC ROCK
-    // --------------------------------------------------
+    // ======================================================
+    // ROCK
+    // ======================================================
 
     private void drawRock(
             float x,
             float y,
             float z,
+
             float sx,
             float sy,
             float sz,
+
             float rotation) {
 
         Matrix.setIdentityM(
@@ -686,9 +863,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
-    // ROCK MODEL
-    // --------------------------------------------------
+    // ======================================================
+    // ROCK DRAW
+    // ======================================================
 
     private void drawRockModel(
             float r,
@@ -752,7 +929,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 i++
         ) {
 
-            // Different faces get slightly different shades.
             float shade =
                     0.72f +
                     0.28f *
@@ -813,56 +989,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
-    // CUBE
-    // --------------------------------------------------
-
-    private void drawCube(
-            float x,
-            float y,
-            float z,
-
-            float sx,
-            float sy,
-            float sz,
-
-            float r,
-            float g,
-            float b,
-            float a) {
-
-        Matrix.setIdentityM(
-                model,
-                0
-        );
-
-        Matrix.translateM(
-                model,
-                0,
-                x,
-                y,
-                z
-        );
-
-        Matrix.scaleM(
-                model,
-                0,
-                sx,
-                sy,
-                sz
-        );
-
-        drawCurrentModel(
-                r,
-                g,
-                b,
-                a
-        );
-    }
-
-    // --------------------------------------------------
+    // ======================================================
     // SPHERE
-    // --------------------------------------------------
+    // ======================================================
 
     private void drawSphere(
             float x,
@@ -1012,9 +1141,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
-    // CURRENT CUBE MODEL
-    // --------------------------------------------------
+    // ======================================================
+    // CURRENT MODEL
+    // ======================================================
 
     private void drawCurrentModel(
             float r,
@@ -1138,15 +1267,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // --------------------------------------------------
+    // ======================================================
     // CUBE GEOMETRY
-    // --------------------------------------------------
+    // ======================================================
 
     private void createCube() {
 
         float[] vertices = {
 
-                // Front
                 -0.5f,-0.5f, 0.5f,
                  0.5f,-0.5f, 0.5f,
                  0.5f, 0.5f, 0.5f,
@@ -1155,7 +1283,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                  0.5f, 0.5f, 0.5f,
                 -0.5f, 0.5f, 0.5f,
 
-                // Back
                  0.5f,-0.5f,-0.5f,
                 -0.5f,-0.5f,-0.5f,
                 -0.5f, 0.5f,-0.5f,
@@ -1164,7 +1291,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 -0.5f, 0.5f,-0.5f,
                  0.5f, 0.5f,-0.5f,
 
-                // Top
                 -0.5f, 0.5f, 0.5f,
                  0.5f, 0.5f, 0.5f,
                  0.5f, 0.5f,-0.5f,
@@ -1173,7 +1299,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                  0.5f, 0.5f,-0.5f,
                 -0.5f, 0.5f,-0.5f,
 
-                // Bottom
                 -0.5f,-0.5f,-0.5f,
                  0.5f,-0.5f,-0.5f,
                  0.5f,-0.5f, 0.5f,
@@ -1182,7 +1307,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                  0.5f,-0.5f, 0.5f,
                 -0.5f,-0.5f, 0.5f,
 
-                // Right
                  0.5f,-0.5f, 0.5f,
                  0.5f,-0.5f,-0.5f,
                  0.5f, 0.5f,-0.5f,
@@ -1191,7 +1315,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                  0.5f, 0.5f,-0.5f,
                  0.5f, 0.5f, 0.5f,
 
-                // Left
                 -0.5f,-0.5f,-0.5f,
                 -0.5f,-0.5f, 0.5f,
                 -0.5f, 0.5f, 0.5f,
@@ -1216,9 +1339,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 .position(0);
     }
 
-    // --------------------------------------------------
+    // ======================================================
     // SPHERE GEOMETRY
-    // --------------------------------------------------
+    // ======================================================
 
     private void createSphere(
             int stacks,
@@ -1377,32 +1500,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         return index;
     }
 
-    // --------------------------------------------------
-    // IRREGULAR ROCK GEOMETRY
-    // --------------------------------------------------
+    // ======================================================
+    // ROCK GEOMETRY
+    // ======================================================
 
     private void createRock() {
 
-        /*
-         * Rock structure:
-         *
-         *          top
-         *           /\
-         *       ___/  \___
-         *      /          \
-         *     /            \
-         *    /______________\
-         *
-         * Multiple irregular rings make a
-         * natural low-poly boulder.
-         */
-
         final int sides = 8;
 
-        // 8 top triangles
-        // 8 x 8 middle triangles = 64
-        // 8 bottom triangles
-        // Total = 80 triangles = 240 vertices
         float[] vertices =
                 new float[
                         80 * 3 * 3
@@ -1443,10 +1548,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.03f
         };
 
-        // --------------------------------------------------
-        // TOP TO RING 1
-        // --------------------------------------------------
-
+        // Top
         for (
                 int i = 0;
                 i < sides;
@@ -1472,7 +1574,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     sides)
                     + angleOffset[next];
 
-            // Top vertex
             index =
                     putVertex(
                             vertices,
@@ -1482,7 +1583,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                             0f
                     );
 
-            // Ring 1 vertex
             index =
                     putVertex(
                             vertices,
@@ -1497,7 +1597,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                             ring1Radius[i]
                     );
 
-            // Next ring 1 vertex
             index =
                     putVertex(
                             vertices,
@@ -1513,10 +1612,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     );
         }
 
-        // --------------------------------------------------
-        // RING 1 TO RING 2
-        // --------------------------------------------------
-
+        // Middle
         for (
                 int i = 0;
                 i < sides;
@@ -1570,7 +1666,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     0.05f +
                     ((next % 2) * 0.03f);
 
-            // Triangle 1
             index =
                     putVertex(
                             vertices,
@@ -1604,7 +1699,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                             Math.sin(a1) * r21
                     );
 
-            // Triangle 2
             index =
                     putVertex(
                             vertices,
@@ -1639,10 +1733,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     );
         }
 
-        // --------------------------------------------------
-        // RING 2 TO BOTTOM
-        // --------------------------------------------------
-
+        // Bottom
         for (
                 int i = 0;
                 i < sides;
@@ -1668,7 +1759,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                     sides)
                     + angleOffset[next];
 
-            // Ring 2
             index =
                     putVertex(
                             vertices,
@@ -1682,7 +1772,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                             ring2Radius[i]
                     );
 
-            // Bottom center
             index =
                     putVertex(
                             vertices,
@@ -1692,7 +1781,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                             0f
                     );
 
-            // Next ring 2
             index =
                     putVertex(
                             vertices,
@@ -1739,9 +1827,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         return index;
     }
 
-    // --------------------------------------------------
-    // SHADER
-    // --------------------------------------------------
+    // ======================================================
+    // SHADER LOADER
+    // ======================================================
 
     private int loadShader(
             int type,
