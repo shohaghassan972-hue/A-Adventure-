@@ -33,6 +33,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     @Override
     public void onSurfaceCreated(
+            javax.microedition.khronos.opengles.GL10 gl,
             javax.microedition.khronos.egl.EGLConfig config) {
 
         GLES20.glClearColor(
@@ -49,7 +50,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "attribute vec4 aColor;" +
                 "uniform mat4 uMVP;" +
                 "varying vec4 vColor;" +
-
                 "void main() {" +
                 "    gl_Position = uMVP * aPosition;" +
                 "    vColor = aColor;" +
@@ -58,7 +58,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         String fragmentShaderCode =
                 "precision mediump float;" +
                 "varying vec4 vColor;" +
-
                 "void main() {" +
                 "    gl_FragColor = vColor;" +
                 "}";
@@ -107,8 +106,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         createCube();
 
-        // Low-poly sphere for natural foliage.
-        createSphere(8, 12);
+        createSphere(
+                8,
+                12
+        );
     }
 
     @Override
@@ -147,7 +148,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
-        // Camera looks forward according to yaw.
         float lookX =
                 cameraX +
                 (float) Math.sin(yaw);
@@ -178,7 +178,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         drawGround();
 
-        // Back area
+        // Trees - back area
         drawTree(
                 -12f,
                 0f,
@@ -207,7 +207,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.95f
         );
 
-        // Middle area
+        // Trees - middle area
         drawTree(
                 -16f,
                 0f,
@@ -236,7 +236,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1.10f
         );
 
-        // Far/back side
+        // Trees - far side
         drawTree(
                 -13f,
                 0f,
@@ -321,7 +321,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
     }
 
-    // Movement
+    // --------------------------------------------------
+    // MOVEMENT
+    // --------------------------------------------------
+
     public void addMovement(
             float forward,
             float side) {
@@ -332,17 +335,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         float cos =
                 (float) Math.cos(yaw);
 
-        // Forward/backward
         cameraX += sin * forward;
-
         cameraZ -= cos * forward;
 
-        // Left/right
         cameraX += cos * side;
-
         cameraZ += sin * side;
 
-        // Keep player inside map.
         cameraX =
                 Math.max(
                         -28f,
@@ -362,7 +360,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 );
     }
 
-    // Camera rotation
+    // --------------------------------------------------
+    // CAMERA
+    // --------------------------------------------------
+
     public void addYaw(float amount) {
         yaw += amount;
     }
@@ -415,7 +416,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Main lower branch
+        // Lower branch
         drawBranch(
                 x - 0.25f * s,
                 y + 1.65f * s,
@@ -459,10 +460,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0f,
                 -42f
         );
-
-        // --------------------------------------------------
-        // NATURAL FOLIAGE
-        // --------------------------------------------------
 
         // Main crown
         drawSphere(
@@ -534,7 +531,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f
         );
 
-        // Small lower foliage
+        // Lower foliage
         drawSphere(
                 x - 0.45f * s,
                 y + 2.55f * s,
