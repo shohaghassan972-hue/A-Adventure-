@@ -17,7 +17,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private FloatBuffer cubeBuffer;
     private FloatBuffer sphereBuffer;
+    private FloatBuffer rockBuffer;
+
     private int sphereVertexCount;
+    private int rockVertexCount;
 
     private int program;
     private int positionHandle;
@@ -110,6 +113,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 8,
                 12
         );
+
+        // New irregular 3D rock geometry
+        createRock();
     }
 
     @Override
@@ -178,7 +184,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         drawGround();
 
-        // Trees - back area
+        // --------------------------------------------------
+        // TREES
+        // --------------------------------------------------
+
         drawTree(
                 -12f,
                 0f,
@@ -207,7 +216,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.95f
         );
 
-        // Trees - middle area
         drawTree(
                 -16f,
                 0f,
@@ -236,7 +244,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1.10f
         );
 
-        // Trees - far side
         drawTree(
                 -13f,
                 0f,
@@ -265,59 +272,68 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.75f
         );
 
-        // Rocks
+        // --------------------------------------------------
+        // REALISTIC ROCKS
+        // --------------------------------------------------
+
         drawRock(
                 -8f,
-                0.20f,
+                0f,
                 -10f,
                 1.0f,
                 0.65f,
-                0.8f
+                0.8f,
+                8f
         );
 
         drawRock(
                 2f,
-                0.18f,
+                0f,
                 -9f,
-                0.8f,
-                0.5f,
-                0.7f
+                0.75f,
+                0.48f,
+                0.65f,
+                -12f
         );
 
         drawRock(
                 11f,
-                0.22f,
+                0f,
                 -7f,
-                1.1f,
-                0.6f,
-                0.8f
+                1.15f,
+                0.62f,
+                0.82f,
+                18f
         );
 
         drawRock(
                 -12f,
-                0.18f,
+                0f,
                 3f,
-                0.9f,
-                0.5f,
-                0.7f
+                0.90f,
+                0.52f,
+                0.70f,
+                -20f
         );
 
         drawRock(
                 5f,
-                0.20f,
+                0f,
                 4f,
                 1.0f,
                 0.55f,
-                0.85f
+                0.85f,
+                10f
         );
 
         drawRock(
                 14f,
-                0.16f,
+                0f,
                 6f,
-                0.75f,
+                0.78f,
                 0.45f,
-                0.65f
+                0.68f,
+                -15f
         );
     }
 
@@ -620,17 +636,17 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     }
 
     // --------------------------------------------------
-    // ROCK
+    // REALISTIC ROCK
     // --------------------------------------------------
 
     private void drawRock(
             float x,
             float y,
             float z,
-
             float sx,
             float sy,
-            float sz) {
+            float sz,
+            float rotation) {
 
         Matrix.setIdentityM(
                 model,
@@ -641,25 +657,16 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 model,
                 0,
                 x,
-                y,
+                y + sy * 0.42f,
                 z
         );
 
         Matrix.rotateM(
                 model,
                 0,
-                12f,
+                rotation,
                 0f,
                 1f,
-                0f
-        );
-
-        Matrix.rotateM(
-                model,
-                0,
-                -8f,
-                1f,
-                0f,
                 0f
         );
 
@@ -671,11 +678,138 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 sz
         );
 
-        drawCurrentModel(
-                0.28f,
-                0.28f,
-                0.25f,
+        drawRockModel(
+                0.30f,
+                0.30f,
+                0.27f,
                 1f
+        );
+    }
+
+    // --------------------------------------------------
+    // ROCK MODEL
+    // --------------------------------------------------
+
+    private void drawRockModel(
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                mvp,
+                0
+        );
+
+        GLES20.glUseProgram(
+                program
+        );
+
+        GLES20.glUniformMatrix4fv(
+                mvpHandle,
+                1,
+                false,
+                mvp,
+                0
+        );
+
+        rockBuffer.position(0);
+
+        GLES20.glVertexAttribPointer(
+                positionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                3 * 4,
+                rockBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
+
+        float[] colors =
+                new float[
+                        rockVertexCount * 4
+                ];
+
+        for (
+                int i = 0;
+                i < rockVertexCount;
+                i++
+        ) {
+
+            // Different faces get slightly different shades.
+            float shade =
+                    0.72f +
+                    0.28f *
+                    ((i % 8) / 7f);
+
+            colors[i * 4] =
+                    r * shade;
+
+            colors[i * 4 + 1] =
+                    g * shade;
+
+            colors[i * 4 + 2] =
+                    b * shade;
+
+            colors[i * 4 + 3] =
+                    a;
+        }
+
+        FloatBuffer colorBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                colors.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        colorBuffer
+                .put(colors)
+                .position(0);
+
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                colorBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                colorHandle
+        );
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                rockVertexCount
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                positionHandle
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                colorHandle
         );
     }
 
@@ -879,7 +1013,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     }
 
     // --------------------------------------------------
-    // DRAW CURRENT MODEL
+    // CURRENT CUBE MODEL
     // --------------------------------------------------
 
     private void drawCurrentModel(
@@ -1239,6 +1373,368 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 sinPhi *
                 (float)
                 Math.sin(theta);
+
+        return index;
+    }
+
+    // --------------------------------------------------
+    // IRREGULAR ROCK GEOMETRY
+    // --------------------------------------------------
+
+    private void createRock() {
+
+        /*
+         * Rock structure:
+         *
+         *          top
+         *           /\
+         *       ___/  \___
+         *      /          \
+         *     /            \
+         *    /______________\
+         *
+         * Multiple irregular rings make a
+         * natural low-poly boulder.
+         */
+
+        final int sides = 8;
+
+        // 8 top triangles
+        // 8 x 8 middle triangles = 64
+        // 8 bottom triangles
+        // Total = 80 triangles = 240 vertices
+        float[] vertices =
+                new float[
+                        80 * 3 * 3
+                ];
+
+        int index = 0;
+
+        float[] ring1Radius = {
+                0.72f,
+                0.88f,
+                0.80f,
+                0.95f,
+                0.76f,
+                0.90f,
+                0.84f,
+                0.78f
+        };
+
+        float[] ring2Radius = {
+                0.92f,
+                1.00f,
+                0.86f,
+                1.05f,
+                0.90f,
+                0.98f,
+                0.88f,
+                0.94f
+        };
+
+        float[] angleOffset = {
+                0.00f,
+                0.08f,
+                -0.05f,
+                0.06f,
+                -0.04f,
+                0.07f,
+                -0.06f,
+                0.03f
+        };
+
+        // --------------------------------------------------
+        // TOP TO RING 1
+        // --------------------------------------------------
+
+        for (
+                int i = 0;
+                i < sides;
+                i++
+        ) {
+
+            int next =
+                    (i + 1) % sides;
+
+            float a0 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    i /
+                    sides)
+                    + angleOffset[i];
+
+            float a1 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    next /
+                    sides)
+                    + angleOffset[next];
+
+            // Top vertex
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            0f,
+                            1.05f,
+                            0f
+                    );
+
+            // Ring 1 vertex
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) *
+                            ring1Radius[i],
+                            0.45f +
+                            ((i % 3) * 0.04f),
+                            (float)
+                            Math.sin(a0) *
+                            ring1Radius[i]
+                    );
+
+            // Next ring 1 vertex
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) *
+                            ring1Radius[next],
+                            0.45f +
+                            ((next % 3) * 0.04f),
+                            (float)
+                            Math.sin(a1) *
+                            ring1Radius[next]
+                    );
+        }
+
+        // --------------------------------------------------
+        // RING 1 TO RING 2
+        // --------------------------------------------------
+
+        for (
+                int i = 0;
+                i < sides;
+                i++
+        ) {
+
+            int next =
+                    (i + 1) % sides;
+
+            float a0 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    i /
+                    sides)
+                    + angleOffset[i];
+
+            float a1 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    next /
+                    sides)
+                    + angleOffset[next];
+
+            float r10 =
+                    ring1Radius[i];
+
+            float r11 =
+                    ring1Radius[next];
+
+            float r20 =
+                    ring2Radius[i];
+
+            float r21 =
+                    ring2Radius[next];
+
+            float y10 =
+                    0.45f +
+                    ((i % 3) * 0.04f);
+
+            float y11 =
+                    0.45f +
+                    ((next % 3) * 0.04f);
+
+            float y20 =
+                    0.05f +
+                    ((i % 2) * 0.03f);
+
+            float y21 =
+                    0.05f +
+                    ((next % 2) * 0.03f);
+
+            // Triangle 1
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) * r10,
+                            y10,
+                            (float)
+                            Math.sin(a0) * r10
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) * r20,
+                            y20,
+                            (float)
+                            Math.sin(a0) * r20
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) * r21,
+                            y21,
+                            (float)
+                            Math.sin(a1) * r21
+                    );
+
+            // Triangle 2
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) * r10,
+                            y10,
+                            (float)
+                            Math.sin(a0) * r10
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) * r21,
+                            y21,
+                            (float)
+                            Math.sin(a1) * r21
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) * r11,
+                            y11,
+                            (float)
+                            Math.sin(a1) * r11
+                    );
+        }
+
+        // --------------------------------------------------
+        // RING 2 TO BOTTOM
+        // --------------------------------------------------
+
+        for (
+                int i = 0;
+                i < sides;
+                i++
+        ) {
+
+            int next =
+                    (i + 1) % sides;
+
+            float a0 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    i /
+                    sides)
+                    + angleOffset[i];
+
+            float a1 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    next /
+                    sides)
+                    + angleOffset[next];
+
+            // Ring 2
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) *
+                            ring2Radius[i],
+                            0.05f,
+                            (float)
+                            Math.sin(a0) *
+                            ring2Radius[i]
+                    );
+
+            // Bottom center
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            0f,
+                            -0.10f,
+                            0f
+                    );
+
+            // Next ring 2
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) *
+                            ring2Radius[next],
+                            0.05f,
+                            (float)
+                            Math.sin(a1) *
+                            ring2Radius[next]
+                    );
+        }
+
+        rockVertexCount =
+                index / 3;
+
+        rockBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        rockBuffer
+                .put(vertices)
+                .position(0);
+    }
+
+    private int putVertex(
+            float[] data,
+            int index,
+            float x,
+            float y,
+            float z) {
+
+        data[index++] = x;
+        data[index++] = y;
+        data[index++] = z;
 
         return index;
     }
