@@ -18,6 +18,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private FloatBuffer cubeBuffer;
     private FloatBuffer sphereBuffer;
     private FloatBuffer rockBuffer;
+    private FloatBuffer skyBuffer;
 
     private int sphereVertexCount;
     private int rockVertexCount;
@@ -31,8 +32,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     // Sky shader
     private int skyProgram;
     private int skyPositionHandle;
+    private int skyAspectHandle;
 
-    private FloatBuffer skyBuffer;
+    private float skyAspect = 1f;
 
     // First-person camera
     private float cameraX = 0f;
@@ -126,22 +128,37 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 );
 
         // ==================================================
-        // SKY SHADER
+        // SKY + SUN SHADER
         // ==================================================
 
         String skyVertexShaderCode =
                 "attribute vec4 aPosition;" +
                 "varying float vSkyY;" +
+                "varying vec2 vUV;" +
+
                 "void main() {" +
+
                 "    gl_Position = aPosition;" +
+
                 "    vSkyY = aPosition.y;" +
+
+                "    vUV = aPosition.xy * 0.5 + 0.5;" +
+
                 "}";
 
         String skyFragmentShaderCode =
                 "precision mediump float;" +
+
                 "varying float vSkyY;" +
+                "varying vec2 vUV;" +
+
+                "uniform float uAspect;" +
 
                 "void main() {" +
+
+                "    // --------------------------------" +
+                "    // Sky gradient" +
+                "    // --------------------------------" +
 
                 "    float t = clamp(" +
                 "        (vSkyY + 1.0) * 0.5," +
@@ -160,6 +177,63 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "            horizonColor," +
                 "            upperColor," +
                 "            t" +
+                "        );" +
+
+                "    // --------------------------------" +
+                "    // Sun position" +
+                "    // --------------------------------" +
+
+                "    vec2 sunPosition =" +
+                "        vec2(0.76, 0.72);" +
+
+                "    vec2 sunPoint =" +
+                "        vUV - sunPosition;" +
+
+                "    sunPoint.x *=" +
+                "        uAspect;" +
+
+                "    float distanceToSun =" +
+                "        length(sunPoint);" +
+
+                "    // --------------------------------" +
+                "    // Natural sun glow" +
+                "    // --------------------------------" +
+
+                "    float outerGlow =" +
+                "        1.0 - smoothstep(" +
+                "            0.04," +
+                "            0.34," +
+                "            distanceToSun" +
+                "        );" +
+
+                "    outerGlow =" +
+                "        outerGlow * outerGlow;" +
+
+                "    vec3 glowColor =" +
+                "        vec3(1.0, 0.88, 0.62);" +
+
+                "    skyColor +=" +
+                "        glowColor * outerGlow * 0.24;" +
+
+                "    // --------------------------------" +
+                "    // Sun disc" +
+                "    // --------------------------------" +
+
+                "    float sunDisc =" +
+                "        1.0 - smoothstep(" +
+                "            0.015," +
+                "            0.032," +
+                "            distanceToSun" +
+                "        );" +
+
+                "    vec3 sunColor =" +
+                "        vec3(1.0, 0.94, 0.72);" +
+
+                "    skyColor =" +
+                "        mix(" +
+                "            skyColor," +
+                "            sunColor," +
+                "            sunDisc" +
                 "        );" +
 
                 "    gl_FragColor =" +
@@ -202,6 +276,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         "aPosition"
                 );
 
+        skyAspectHandle =
+                GLES20.glGetUniformLocation(
+                        skyProgram,
+                        "uAspect"
+                );
+
         createSky();
 
         createCube();
@@ -231,6 +311,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 height
         );
 
+        skyAspect =
+                (float) width /
+                (float) height;
+
         float ratio =
                 (float) width /
                 (float) height;
@@ -258,6 +342,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
+        // Sky + sun first
         drawSky();
 
         GLES20.glEnable(
@@ -392,6 +477,11 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 skyProgram
         );
 
+        GLES20.glUniform1f(
+                skyAspectHandle,
+                skyAspect
+        );
+
         skyBuffer.position(0);
 
         GLES20.glVertexAttribPointer(
@@ -497,8 +587,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     // ======================================================
     // CUBE DRAW
-    // ======================================================
-    // FIX: This method was missing in Step 5A.
     // ======================================================
 
     private void drawCube(
