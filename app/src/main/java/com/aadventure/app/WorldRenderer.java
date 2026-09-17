@@ -22,7 +22,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int sphereVertexCount;
     private int rockVertexCount;
 
-    // Main world shader
+    // World shader
     private int program;
     private int positionHandle;
     private int colorHandle;
@@ -31,7 +31,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     // Sky shader
     private int skyProgram;
     private int skyPositionHandle;
-    private int skyMvpHandle;
 
     private FloatBuffer skyBuffer;
 
@@ -259,10 +258,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
-        // Realistic sky gradient first
         drawSky();
 
-        // Enable depth for the 3D world
         GLES20.glEnable(
                 GLES20.GL_DEPTH_TEST
         );
@@ -301,151 +298,58 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         // TREES
         // ==================================================
 
-        drawTree(
-                -12f,
-                0f,
-                -12f,
-                1.15f
-        );
+        drawTree(-12f, 0f, -12f, 1.15f);
+        drawTree(-4f, 0f, -16f, 0.90f);
+        drawTree(5f, 0f, -14f, 1.05f);
+        drawTree(14f, 0f, -11f, 0.95f);
 
-        drawTree(
-                -4f,
-                0f,
-                -16f,
-                0.90f
-        );
+        drawTree(-16f, 0f, -2f, 0.85f);
+        drawTree(-7f, 0f, -5f, 0.72f);
+        drawTree(7f, 0f, -4f, 0.82f);
+        drawTree(16f, 0f, -1f, 1.10f);
 
-        drawTree(
-                5f,
-                0f,
-                -14f,
-                1.05f
-        );
-
-        drawTree(
-                14f,
-                0f,
-                -11f,
-                0.95f
-        );
-
-        drawTree(
-                -16f,
-                0f,
-                -2f,
-                0.85f
-        );
-
-        drawTree(
-                -7f,
-                0f,
-                -5f,
-                0.72f
-        );
-
-        drawTree(
-                7f,
-                0f,
-                -4f,
-                0.82f
-        );
-
-        drawTree(
-                16f,
-                0f,
-                -1f,
-                1.10f
-        );
-
-        drawTree(
-                -13f,
-                0f,
-                8f,
-                0.95f
-        );
-
-        drawTree(
-                -2f,
-                0f,
-                11f,
-                1.10f
-        );
-
-        drawTree(
-                10f,
-                0f,
-                9f,
-                0.88f
-        );
-
-        drawTree(
-                17f,
-                0f,
-                12f,
-                0.75f
-        );
+        drawTree(-13f, 0f, 8f, 0.95f);
+        drawTree(-2f, 0f, 11f, 1.10f);
+        drawTree(10f, 0f, 9f, 0.88f);
+        drawTree(17f, 0f, 12f, 0.75f);
 
         // ==================================================
         // ROCKS
         // ==================================================
 
         drawRock(
-                -8f,
-                0f,
-                -10f,
-                1.0f,
-                0.65f,
-                0.8f,
+                -8f, 0f, -10f,
+                1.0f, 0.65f, 0.8f,
                 8f
         );
 
         drawRock(
-                2f,
-                0f,
-                -9f,
-                0.75f,
-                0.48f,
-                0.65f,
+                2f, 0f, -9f,
+                0.75f, 0.48f, 0.65f,
                 -12f
         );
 
         drawRock(
-                11f,
-                0f,
-                -7f,
-                1.15f,
-                0.62f,
-                0.82f,
+                11f, 0f, -7f,
+                1.15f, 0.62f, 0.82f,
                 18f
         );
 
         drawRock(
-                -12f,
-                0f,
-                3f,
-                0.90f,
-                0.52f,
-                0.70f,
+                -12f, 0f, 3f,
+                0.90f, 0.52f, 0.70f,
                 -20f
         );
 
         drawRock(
-                5f,
-                0f,
-                4f,
-                1.0f,
-                0.55f,
-                0.85f,
+                5f, 0f, 4f,
+                1.0f, 0.55f, 0.85f,
                 10f
         );
 
         drawRock(
-                14f,
-                0f,
-                6f,
-                0.78f,
-                0.45f,
-                0.68f,
+                14f, 0f, 6f,
+                0.78f, 0.45f, 0.68f,
                 -15f
         );
     }
@@ -592,6 +496,55 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     }
 
     // ======================================================
+    // CUBE DRAW
+    // ======================================================
+    // FIX: This method was missing in Step 5A.
+    // ======================================================
+
+    private void drawCube(
+            float x,
+            float y,
+            float z,
+
+            float sx,
+            float sy,
+            float sz,
+
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                sx,
+                sy,
+                sz
+        );
+
+        drawCurrentModel(
+                r,
+                g,
+                b,
+                a
+        );
+    }
+
+    // ======================================================
     // TREE
     // ======================================================
 
@@ -662,9 +615,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x,
                 y + 3.15f * s,
                 z,
-
                 1.15f * s,
-
                 0.08f,
                 0.43f,
                 0.09f,
@@ -675,9 +626,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x - 0.72f * s,
                 y + 2.85f * s,
                 z + 0.12f * s,
-
                 0.82f * s,
-
                 0.06f,
                 0.36f,
                 0.07f,
@@ -688,9 +637,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x + 0.75f * s,
                 y + 2.88f * s,
                 z - 0.08f * s,
-
                 0.86f * s,
-
                 0.07f,
                 0.39f,
                 0.08f,
@@ -701,9 +648,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x - 0.20f * s,
                 y + 3.75f * s,
                 z,
-
                 0.78f * s,
-
                 0.09f,
                 0.47f,
                 0.10f,
@@ -714,9 +659,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x + 0.48f * s,
                 y + 3.52f * s,
                 z + 0.25f * s,
-
                 0.65f * s,
-
                 0.07f,
                 0.40f,
                 0.08f,
@@ -727,9 +670,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 x - 0.45f * s,
                 y + 2.55f * s,
                 z - 0.18f * s,
-
                 0.55f * s,
-
                 0.055f,
                 0.32f,
                 0.065f,
