@@ -1067,37 +1067,38 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private void drawGround() {
 
-        // Step 3A-2: subtle green variation with no strong tile-to-tile contrast.
-        // The tiles remain adjacent and the existing ground geometry is preserved.
+        // Step 3A-3: add very subtle earth-tone variation to the existing green ground.
+        // The variation stays soft so the field still reads as one continuous grassy area.
+        // Existing tile size, placement and geometry are unchanged.
         final float tileSize = 20f;
         final float y = -0.08f;
 
         drawCube(-20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.240f, 0.560f, 0.210f, 1f);
+                0.248f, 0.553f, 0.202f, 1f);
 
         drawCube(0f, y, -20f, tileSize, 0.16f, tileSize,
-                0.242f, 0.564f, 0.212f, 1f);
+                0.252f, 0.557f, 0.204f, 1f);
 
         drawCube(20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.239f, 0.558f, 0.209f, 1f);
+                0.245f, 0.548f, 0.197f, 1f);
 
         drawCube(-20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.243f, 0.566f, 0.213f, 1f);
+                0.255f, 0.558f, 0.205f, 1f);
 
         drawCube(0f, y, 0f, tileSize, 0.16f, tileSize,
-                0.241f, 0.562f, 0.211f, 1f);
+                0.250f, 0.551f, 0.200f, 1f);
 
         drawCube(20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.238f, 0.557f, 0.208f, 1f);
+                0.242f, 0.545f, 0.194f, 1f);
 
         drawCube(-20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.242f, 0.563f, 0.212f, 1f);
+                0.251f, 0.555f, 0.201f, 1f);
 
         drawCube(0f, y, 20f, tileSize, 0.16f, tileSize,
-                0.244f, 0.567f, 0.214f, 1f);
+                0.257f, 0.560f, 0.207f, 1f);
 
         drawCube(20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.239f, 0.559f, 0.209f, 1f);
+                0.246f, 0.549f, 0.198f, 1f);
     }
 
     // --------------------------------------------------
