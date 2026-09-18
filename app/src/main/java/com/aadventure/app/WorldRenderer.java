@@ -125,7 +125,18 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "precision mediump float;" +
                 "varying vec4 vColor;" +
                 "void main() {" +
-                "    gl_FragColor = vColor;" +
+                "    // Step 2D: lightweight distance-based atmospheric haze." +
+                "    // Use the depth buffer so the effect follows real world geometry." +
+                "    float depth = gl_FragCoord.z * 2.0 - 1.0;" +
+                "    float nearPlane = 0.1;" +
+                "    float farPlane = 150.0;" +
+                "    float viewDepth = (2.0 * nearPlane * farPlane) /" +
+                "        (farPlane + nearPlane - depth * (farPlane - nearPlane));" +
+                "    float haze = smoothstep(24.0, 105.0, viewDepth);" +
+                "    haze = haze * 0.78;" +
+                "    vec3 hazeColor = vec3(0.74, 0.84, 0.94);" +
+                "    vec3 finalColor = mix(vColor.rgb, hazeColor, haze);" +
+                "    gl_FragColor = vec4(finalColor, vColor.a);" +
                 "}";
 
         int vertexShader = loadShader(
@@ -661,6 +672,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             pitch = -limit;
         }
     }
+
+    // --------------------------------------------------
+    // ATMOSPHERIC HAZE - STEP 2D
+    // --------------------------------------------------
+    // Haze is implemented in the main world fragment shader above.
+    // Sky, sun and clouds use their own shaders and remain unchanged.
 
     // --------------------------------------------------
     // SKY - STEP 2A
