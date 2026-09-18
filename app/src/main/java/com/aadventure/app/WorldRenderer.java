@@ -1081,7 +1081,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private void createGround() {
 
-        final int cells = 12;
+        // Step 3A-3: finer ground grid keeps the earth-tone patches small
+        // and soft instead of producing obvious large triangular areas.
+        final int cells = 24;
         final float min = -30f;
         final float max = 30f;
         final float step = (max - min) / cells;
@@ -1146,24 +1148,68 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         vertices[vertexIndex++] = y;
         vertices[vertexIndex++] = z;
 
-        // Two low-frequency layers make small, soft patches rather than large
-        // rectangular tile changes. Earth tone remains intentionally restrained.
-        float waveA = 0.5f + 0.5f * (float) Math.sin(x * 0.30f + z * 0.17f);
-        float waveB = 0.5f + 0.5f * (float) Math.cos(x * 0.13f - z * 0.34f);
-        float patch = 0.55f * waveA + 0.45f * waveB;
-        float earthMask = smoothStep(0.48f, 0.78f, patch) * 0.13f;
+        /*
+         * Step 3A-3: Natural earth-tone variation.
+         *
+         * Two overlapping smooth wave fields create irregular, organic patches.
+         * The warm earth color is deliberately restrained so the field remains
+         * predominantly green from a distance, while becoming visible nearby.
+         */
+        float waveA =
+                0.5f +
+                0.5f * (float) Math.sin(
+                        x * 0.72f +
+                        z * 0.43f
+                );
+
+        float waveB =
+                0.5f +
+                0.5f * (float) Math.cos(
+                        x * 0.31f -
+                        z * 0.67f
+                );
+
+        float waveC =
+                0.5f +
+                0.5f * (float) Math.sin(
+                        x * 0.17f -
+                        z * 0.91f
+                );
+
+        float patch =
+                0.50f * waveA +
+                0.32f * waveB +
+                0.18f * waveC;
+
+        // Soft threshold: no hard-edged brown spots.
+        float earthMask =
+                smoothStep(
+                        0.56f,
+                        0.76f,
+                        patch
+                ) * 0.24f;
 
         final float baseR = 0.250f;
         final float baseG = 0.552f;
         final float baseB = 0.200f;
 
-        final float earthR = 0.315f;
-        final float earthG = 0.455f;
+        // Subtle warm soil/earth tone.
+        final float earthR = 0.355f;
+        final float earthG = 0.435f;
         final float earthB = 0.155f;
 
-        colors[colorIndex] = baseR + (earthR - baseR) * earthMask;
-        colors[colorIndex + 1] = baseG + (earthG - baseG) * earthMask;
-        colors[colorIndex + 2] = baseB + (earthB - baseB) * earthMask;
+        colors[colorIndex] =
+                baseR +
+                (earthR - baseR) * earthMask;
+
+        colors[colorIndex + 1] =
+                baseG +
+                (earthG - baseG) * earthMask;
+
+        colors[colorIndex + 2] =
+                baseB +
+                (earthB - baseB) * earthMask;
+
         colors[colorIndex + 3] = 1f;
 
         return vertexIndex;
