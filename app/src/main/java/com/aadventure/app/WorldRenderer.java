@@ -22,7 +22,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private int skyProgram;
     private int skyPositionHandle;
-    private int skyMvpHandle;
 
     // Sun + soft glow (Step 2B)
     private FloatBuffer sunBuffer;
@@ -253,13 +252,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         skyProgram,
                         "aPosition"
                 );
-
-        skyMvpHandle =
-                GLES20.glGetUniformLocation(
-                        skyProgram,
-                        "uMVP"
-                );
-
         String sunVertexShaderCode =
                 "attribute vec2 aPosition;" +
                 "uniform mat4 uVP;" +
