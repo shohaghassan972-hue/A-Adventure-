@@ -98,6 +98,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private float yaw = 0f;
     private float pitch = 0f;
 
+    // Step 2G joystick input. Updated by the touch overlay and consumed every frame.
+    private volatile float joystickForward = 0f;
+    private volatile float joystickSide = 0f;
+
     @Override
     public void onSurfaceCreated(
             javax.microedition.khronos.opengles.GL10 gl,
@@ -501,6 +505,17 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.72f
         );
 
+        // Apply joystick movement continuously while the finger is held.
+        // A centered joystick produces zero movement.
+        float currentJoystickForward = joystickForward;
+        float currentJoystickSide = joystickSide;
+        if (currentJoystickForward != 0f || currentJoystickSide != 0f) {
+            addMovement(
+                    currentJoystickForward * 0.055f,
+                    currentJoystickSide * 0.055f
+            );
+        }
+
         drawGround();
 
         // --------------------------------------------------
@@ -654,6 +669,15 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0.68f,
                 -15f
         );
+    }
+
+    // --------------------------------------------------
+    // JOYSTICK
+    // --------------------------------------------------
+
+    public void setJoystickInput(float forward, float side) {
+        joystickForward = Math.max(-1f, Math.min(1f, forward));
+        joystickSide = Math.max(-1f, Math.min(1f, side));
     }
 
     // --------------------------------------------------
