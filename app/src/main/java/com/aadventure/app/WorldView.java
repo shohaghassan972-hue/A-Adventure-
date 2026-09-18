@@ -37,6 +37,13 @@ public class WorldView extends GLSurfaceView {
         requestFocus();
     }
 
+    /**
+     * Exposes the renderer to the Step 2G joystick overlay.
+     */
+    public WorldRenderer getRenderer() {
+        return renderer;
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
 
