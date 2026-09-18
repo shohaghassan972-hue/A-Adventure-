@@ -88,7 +88,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int viewHandle;
     private int lightDirHandle;
     private int ambientLightHandle;
-    private int groundDetailHandle;
 
     // First-person camera
     private float cameraX = 0f;
@@ -122,20 +121,16 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "attribute vec4 aPosition;" +
                 "attribute vec4 aColor;" +
                 "uniform mat4 uMVP;" +
-                "uniform mat4 uModel;" +
                 "uniform mat4 uView;" +
                 "uniform vec3 uLightDir;" +
                 "uniform float uAmbientLight;" +
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
                 "varying float vLight;" +
-                "varying vec3 vWorldPos;" +
-                "uniform float uGroundDetail;" +
                 "void main() {" +
                 "    vec4 eyePos = uView * aPosition;" +
                 "    gl_Position = uMVP * aPosition;" +
                 "    vColor = aColor;" +
-                "    vWorldPos = (uModel * aPosition).xyz;" +
                 "    vDistance = length(eyePos.xyz);" +
                 "    vec3 pseudoNormal = normalize(vec3(aPosition.x, aPosition.y * 1.35, aPosition.z));" +
                 "    float diffuse = max(dot(pseudoNormal, normalize(uLightDir)), 0.0);" +
@@ -147,20 +142,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
                 "varying float vLight;" +
-                "varying vec3 vWorldPos;" +
-                "uniform float uGroundDetail;" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
-                "    vec3 baseColor = vColor.rgb;" +
-                "    if (uGroundDetail > 0.5) {" +
-                "        float wave1 = sin(vWorldPos.x * 0.31 + vWorldPos.z * 0.17);" +
-                "        float wave2 = sin(vWorldPos.x * 0.73 - vWorldPos.z * 0.41);" +
-                "        float variation = (wave1 * 0.5 + wave2 * 0.5) * 0.055;" +
-                "        float patch = sin(vWorldPos.x * 1.37 + vWorldPos.z * 1.11) * 0.018;" +
-                "        baseColor *= (1.0 + variation + patch);" +
-                "    }" +
-                "    vec3 litColor = baseColor * vLight;
+                "    vec3 litColor = vColor.rgb * vLight;" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
                 "    vec3 finalColor = mix(litColor, hazeColor, haze);" +
                 "    gl_FragColor = vec4(finalColor, vColor.a);" +
@@ -214,12 +199,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         "uView"
                 );
 
-        modelHandle =
-                GLES20.glGetUniformLocation(
-                        program,
-                        "uModel"
-                );
-
         lightDirHandle =
                 GLES20.glGetUniformLocation(
                         program,
@@ -230,12 +209,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.glGetUniformLocation(
                         program,
                         "uAmbientLight"
-                );
-
-        groundDetailHandle =
-                GLES20.glGetUniformLocation(
-                        program,
-                        "uGroundDetail"
                 );
 
         String skyVertexShaderCode =
@@ -522,11 +495,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         GLES20.glUniform1f(
                 ambientLightHandle,
                 0.72f
-        );
-
-        GLES20.glUniform1f(
-                groundDetailHandle,
-                0.0f
         );
 
         // Apply joystick movement continuously while the finger is held.
@@ -1089,26 +1057,37 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private void drawGround() {
 
-        GLES20.glUseProgram(program);
-        GLES20.glUniform1f(groundDetailHandle, 1.0f);
+        // Step 3A: subtle natural color variation using adjacent ground tiles.
+        // The existing world shader, lighting, haze, trees and rocks remain unchanged.
+        final float tileSize = 20f;
+        final float y = -0.08f;
 
-        drawCube(
-                0f,
-                -0.08f,
-                0f,
+        drawCube(-20f, y, -20f, tileSize, 0.16f, tileSize,
+                0.21f, 0.53f, 0.19f, 1f);
 
-                60f,
-                0.16f,
-                60f,
+        drawCube(0f, y, -20f, tileSize, 0.16f, tileSize,
+                0.23f, 0.56f, 0.21f, 1f);
 
-                0.22f,
-                0.55f,
-                0.20f,
-                1f
-        );
+        drawCube(20f, y, -20f, tileSize, 0.16f, tileSize,
+                0.22f, 0.54f, 0.20f, 1f);
 
-        GLES20.glUseProgram(program);
-        GLES20.glUniform1f(groundDetailHandle, 0.0f);
+        drawCube(-20f, y, 0f, tileSize, 0.16f, tileSize,
+                0.23f, 0.55f, 0.20f, 1f);
+
+        drawCube(0f, y, 0f, tileSize, 0.16f, tileSize,
+                0.22f, 0.55f, 0.20f, 1f);
+
+        drawCube(20f, y, 0f, tileSize, 0.16f, tileSize,
+                0.21f, 0.54f, 0.19f, 1f);
+
+        drawCube(-20f, y, 20f, tileSize, 0.16f, tileSize,
+                0.22f, 0.54f, 0.19f, 1f);
+
+        drawCube(0f, y, 20f, tileSize, 0.16f, tileSize,
+                0.24f, 0.56f, 0.21f, 1f);
+
+        drawCube(20f, y, 20f, tileSize, 0.16f, tileSize,
+                0.22f, 0.53f, 0.18f, 1f);
     }
 
     // --------------------------------------------------
@@ -1754,14 +1733,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1,
                 false,
                 mvp,
-                0
-        );
-
-        GLES20.glUniformMatrix4fv(
-                modelHandle,
-                1,
-                false,
-                model,
                 0
         );
 
