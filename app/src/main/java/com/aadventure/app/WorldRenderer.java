@@ -1151,52 +1151,53 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         /*
          * Step 3A-3: Natural earth-tone variation.
          *
-         * Several low-frequency wave fields are blended together to avoid
-         * obvious stripes or geometric patches. The result is mostly green
-         * from a distance, while warm earth tones become noticeable nearby.
+         * Use smooth 2D noise-like fields instead of directional waves.
+         * This creates small, soft, irregular patches that read as subtle
+         * soil/earth variation without forming visible stripes or grid lines.
          */
-        float waveA =
+        float broadNoise =
                 0.5f +
                 0.5f * (float) Math.sin(
-                        x * 0.92f +
-                        z * 0.57f
+                        x * 0.34f +
+                        1.35f * (float) Math.sin(z * 0.27f)
                 );
 
-        float waveB =
+        float crossNoise =
                 0.5f +
                 0.5f * (float) Math.cos(
-                        x * 0.43f -
-                        z * 0.86f
+                        z * 0.39f -
+                        1.15f * (float) Math.sin(x * 0.23f)
                 );
 
-        float waveC =
+        float fineNoise =
                 0.5f +
                 0.5f * (float) Math.sin(
-                        x * 0.21f -
-                        z * 1.13f
+                        x * 0.78f +
+                        z * 0.61f +
+                        0.85f * (float) Math.sin(x * 0.31f - z * 0.22f)
                 );
 
         float patch =
-                0.46f * waveA +
-                0.34f * waveB +
-                0.20f * waveC;
+                0.52f * broadNoise +
+                0.33f * crossNoise +
+                0.15f * fineNoise;
 
-        // Soft, sparse mask: no hard-edged brown spots.
+        // Keep earth tones sparse and very softly blended into the grass.
         float earthMask =
                 smoothStep(
-                        0.53f,
-                        0.75f,
+                        0.60f,
+                        0.82f,
                         patch
-                ) * 0.34f;
+                ) * 0.30f;
 
         final float baseR = 0.250f;
         final float baseG = 0.552f;
         final float baseB = 0.200f;
 
-        // Warm muted soil tone. It remains blended with the green base.
-        final float earthR = 0.410f;
-        final float earthG = 0.335f;
-        final float earthB = 0.115f;
+        // Muted warm earth tone; never replaces the dominant green field.
+        final float earthR = 0.390f;
+        final float earthG = 0.370f;
+        final float earthB = 0.145f;
 
         colors[colorIndex] =
                 baseR +
@@ -1209,7 +1210,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         colors[colorIndex + 2] =
                 baseB +
                 (earthB - baseB) * earthMask;
-
         colors[colorIndex + 3] = 1f;
 
         return vertexIndex;
