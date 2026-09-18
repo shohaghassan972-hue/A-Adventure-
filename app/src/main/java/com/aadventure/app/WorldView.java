@@ -94,18 +94,22 @@ public class WorldView extends GLSurfaceView {
                 if (lookingTouch) {
 
                     /*
-                     * Camera sensitivity
-                     *
-                     * Previous: 0.008
-                     * New:      0.004
-                     *
-                     * Sensitivity reduced by 50%.
+                     * Camera sensitivity remains unchanged.
+                     * Horizontal = yaw
+                     * Vertical   = pitch
                      */
                     float turnAmount =
                             dx * 0.004f;
 
+                    float lookAmount =
+                            -dy * 0.004f;
+
                     renderer.addYaw(
                             turnAmount
+                    );
+
+                    renderer.addPitch(
+                            lookAmount
                     );
                 }
 
@@ -126,4 +130,4 @@ public class WorldView extends GLSurfaceView {
                 return true;
         }
     }
-        }
+}
