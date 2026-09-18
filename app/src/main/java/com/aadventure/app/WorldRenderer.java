@@ -16,6 +16,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private final float[] mvp = new float[16];
 
     private FloatBuffer cubeBuffer;
+    private FloatBuffer groundVertexBuffer;
+    private FloatBuffer groundColorBuffer;
+    private int groundVertexCount;
     private FloatBuffer sphereBuffer;
     private FloatBuffer rockBuffer;
     private FloatBuffer skyBuffer;
@@ -390,6 +393,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         createCloud();
 
         createCube();
+        createGround();
 
         createSphere(
                 8,
@@ -512,8 +516,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             );
         }
 
-        // Step 3A-2: ground uses a flat per-tile color. This prevents the shared
-        // cube shading from producing large triangular patches across the field.
+        // Step 3A-3: ground variation is baked into a smooth mesh. Keep the
+        // previous flat-ground lighting treatment so daylight does not introduce
+        // artificial diagonal shading over the natural color variation.
         groundFlatColor = true;
         GLES20.glUniform1f(ambientLightHandle, 1.0f);
         drawGround();
@@ -1067,38 +1072,171 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private void drawGround() {
 
-        // Step 3A-3: add very subtle earth-tone variation to the existing green ground.
-        // The variation stays soft so the field still reads as one continuous grassy area.
-        // Existing tile size, placement and geometry are unchanged.
-        final float tileSize = 20f;
-        final float y = -0.08f;
+        // Step 3A-3: natural earth-tone variation.
+        // The field stays predominantly green, while small, soft variations
+        // become easier to notice at close range. The ground mesh is continuous
+        // so there are no large tile-color boundaries or artificial diagonals.
+        drawGroundMesh();
+    }
 
-        drawCube(-20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.248f, 0.553f, 0.202f, 1f);
+    private void createGround() {
 
-        drawCube(0f, y, -20f, tileSize, 0.16f, tileSize,
-                0.252f, 0.557f, 0.204f, 1f);
+        final int cells = 12;
+        final float min = -30f;
+        final float max = 30f;
+        final float step = (max - min) / cells;
 
-        drawCube(20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.245f, 0.548f, 0.197f, 1f);
+        final int verticesPerCell = 6;
+        groundVertexCount = cells * cells * verticesPerCell;
 
-        drawCube(-20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.255f, 0.558f, 0.205f, 1f);
+        float[] vertices = new float[groundVertexCount * 3];
+        float[] colors = new float[groundVertexCount * 4];
 
-        drawCube(0f, y, 0f, tileSize, 0.16f, tileSize,
-                0.250f, 0.551f, 0.200f, 1f);
+        int vi = 0;
+        int ci = 0;
 
-        drawCube(20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.242f, 0.545f, 0.194f, 1f);
+        for (int row = 0; row < cells; row++) {
+            float z0 = min + row * step;
+            float z1 = z0 + step;
 
-        drawCube(-20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.251f, 0.555f, 0.201f, 1f);
+            for (int col = 0; col < cells; col++) {
+                float x0 = min + col * step;
+                float x1 = x0 + step;
 
-        drawCube(0f, y, 20f, tileSize, 0.16f, tileSize,
-                0.257f, 0.560f, 0.207f, 1f);
+                // Two triangles per small ground cell.
+                vi = putGroundVertex(vertices, colors, vi, ci, x0, -0.08f, z0);
+                ci += 4;
+                vi = putGroundVertex(vertices, colors, vi, ci, x1, -0.08f, z0);
+                ci += 4;
+                vi = putGroundVertex(vertices, colors, vi, ci, x1, -0.08f, z1);
+                ci += 4;
 
-        drawCube(20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.246f, 0.549f, 0.198f, 1f);
+                vi = putGroundVertex(vertices, colors, vi, ci, x0, -0.08f, z0);
+                ci += 4;
+                vi = putGroundVertex(vertices, colors, vi, ci, x1, -0.08f, z1);
+                ci += 4;
+                vi = putGroundVertex(vertices, colors, vi, ci, x0, -0.08f, z1);
+                ci += 4;
+            }
+        }
+
+        groundVertexBuffer = ByteBuffer
+                .allocateDirect(vertices.length * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+        groundVertexBuffer.put(vertices).position(0);
+
+        groundColorBuffer = ByteBuffer
+                .allocateDirect(colors.length * 4)
+                .order(ByteOrder.nativeOrder())
+                .asFloatBuffer();
+        groundColorBuffer.put(colors).position(0);
+    }
+
+    private int putGroundVertex(
+            float[] vertices,
+            float[] colors,
+            int vertexIndex,
+            int colorIndex,
+            float x,
+            float y,
+            float z) {
+
+        vertices[vertexIndex++] = x;
+        vertices[vertexIndex++] = y;
+        vertices[vertexIndex++] = z;
+
+        // Two low-frequency layers make small, soft patches rather than large
+        // rectangular tile changes. Earth tone remains intentionally restrained.
+        float waveA = 0.5f + 0.5f * (float) Math.sin(x * 0.30f + z * 0.17f);
+        float waveB = 0.5f + 0.5f * (float) Math.cos(x * 0.13f - z * 0.34f);
+        float patch = 0.55f * waveA + 0.45f * waveB;
+        float earthMask = smoothStep(0.48f, 0.78f, patch) * 0.13f;
+
+        final float baseR = 0.250f;
+        final float baseG = 0.552f;
+        final float baseB = 0.200f;
+
+        final float earthR = 0.315f;
+        final float earthG = 0.455f;
+        final float earthB = 0.155f;
+
+        colors[colorIndex] = baseR + (earthR - baseR) * earthMask;
+        colors[colorIndex + 1] = baseG + (earthG - baseG) * earthMask;
+        colors[colorIndex + 2] = baseB + (earthB - baseB) * earthMask;
+        colors[colorIndex + 3] = 1f;
+
+        return vertexIndex;
+    }
+
+    private float smoothStep(float edge0, float edge1, float value) {
+        float t = (value - edge0) / (edge1 - edge0);
+        t = Math.max(0f, Math.min(1f, t));
+        return t * t * (3f - 2f * t);
+    }
+
+    private void drawGroundMesh() {
+
+        Matrix.setIdentityM(model, 0);
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                mvp,
+                0
+        );
+
+        GLES20.glUseProgram(program);
+
+        GLES20.glUniformMatrix4fv(
+                mvpHandle,
+                1,
+                false,
+                mvp,
+                0
+        );
+
+        groundVertexBuffer.position(0);
+        GLES20.glVertexAttribPointer(
+                positionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                3 * 4,
+                groundVertexBuffer
+        );
+        GLES20.glEnableVertexAttribArray(positionHandle);
+
+        groundColorBuffer.position(0);
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                groundColorBuffer
+        );
+        GLES20.glEnableVertexAttribArray(colorHandle);
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                groundVertexCount
+        );
+
+        GLES20.glDisableVertexAttribArray(positionHandle);
+        GLES20.glDisableVertexAttribArray(colorHandle);
     }
 
     // --------------------------------------------------
