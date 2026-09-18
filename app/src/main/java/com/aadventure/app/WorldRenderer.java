@@ -24,6 +24,16 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int skyPositionHandle;
     private int skyMvpHandle;
 
+    // Sun + soft glow (Step 2B)
+    private FloatBuffer sunBuffer;
+    private int sunProgram;
+    private int sunPositionHandle;
+    private int sunMvpHandle;
+    private int sunCenterHandle;
+    private int sunRightHandle;
+    private int sunUpHandle;
+    private int sunSizeHandle;
+
     private int sphereVertexCount;
     private int rockVertexCount;
 
@@ -163,7 +173,88 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         "uMVP"
                 );
 
+        String sunVertexShaderCode =
+                "attribute vec2 aPosition;" +
+                "uniform mat4 uVP;" +
+                "uniform vec3 uCenter;" +
+                "uniform vec3 uRight;" +
+                "uniform vec3 uUp;" +
+                "uniform float uSize;" +
+                "varying vec2 vLocal;" +
+                "void main() {" +
+                "    vec3 worldPos = uCenter + uRight * aPosition.x * uSize + uUp * aPosition.y * uSize;" +
+                "    gl_Position = uVP * vec4(worldPos, 1.0);" +
+                "    vLocal = aPosition;" +
+                "}";
+
+        String sunFragmentShaderCode =
+                "precision mediump float;" +
+                "varying vec2 vLocal;" +
+                "void main() {" +
+                "    float d = length(vLocal);" +
+                "    float core = 1.0 - smoothstep(0.0, 0.42, d);" +
+                "    float glow = 1.0 - smoothstep(0.18, 1.0, d);" +
+                "    float alpha = max(core * 0.98, glow * 0.34);" +
+                "    if (alpha < 0.01) discard;" +
+                "    vec3 coreColor = vec3(1.0, 0.96, 0.78);" +
+                "    vec3 glowColor = vec3(1.0, 0.76, 0.28);" +
+                "    vec3 color = mix(glowColor, coreColor, core);" +
+                "    gl_FragColor = vec4(color, alpha);" +
+                "}";
+
+        int sunVertexShader = loadShader(
+                GLES20.GL_VERTEX_SHADER,
+                sunVertexShaderCode
+        );
+
+        int sunFragmentShader = loadShader(
+                GLES20.GL_FRAGMENT_SHADER,
+                sunFragmentShaderCode
+        );
+
+        sunProgram = GLES20.glCreateProgram();
+        GLES20.glAttachShader(sunProgram, sunVertexShader);
+        GLES20.glAttachShader(sunProgram, sunFragmentShader);
+        GLES20.glLinkProgram(sunProgram);
+
+        sunPositionHandle =
+                GLES20.glGetAttribLocation(
+                        sunProgram,
+                        "aPosition"
+                );
+
+        sunMvpHandle =
+                GLES20.glGetUniformLocation(
+                        sunProgram,
+                        "uVP"
+                );
+
+        sunCenterHandle =
+                GLES20.glGetUniformLocation(
+                        sunProgram,
+                        "uCenter"
+                );
+
+        sunRightHandle =
+                GLES20.glGetUniformLocation(
+                        sunProgram,
+                        "uRight"
+                );
+
+        sunUpHandle =
+                GLES20.glGetUniformLocation(
+                        sunProgram,
+                        "uUp"
+                );
+
+        sunSizeHandle =
+                GLES20.glGetUniformLocation(
+                        sunProgram,
+                        "uSize"
+                );
+
         createSky();
+        createSun();
 
         createCube();
 
@@ -248,6 +339,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         );
 
         drawSky();
+        drawSun();
 
         drawGround();
 
@@ -523,6 +615,126 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         // Restore the normal world shader for ground, trees and rocks.
         GLES20.glUseProgram(program);
+    }
+
+    // --------------------------------------------------
+    // SUN + NATURAL GLOW - STEP 2B
+    // --------------------------------------------------
+
+    private void createSun() {
+        float[] vertices = {
+                -1f, -1f,
+                 1f, -1f,
+                -1f,  1f,
+                 1f, -1f,
+                 1f,  1f,
+                -1f,  1f
+        };
+
+        sunBuffer =
+                ByteBuffer
+                        .allocateDirect(vertices.length * 4)
+                        .order(ByteOrder.nativeOrder())
+                        .asFloatBuffer();
+
+        sunBuffer.put(vertices).position(0);
+    }
+
+    private void drawSun() {
+        // Fixed world-space position: the sun does not follow the screen.
+        final float sunX = 0f;
+        final float sunY = 32f;
+        final float sunZ = -70f;
+
+        float cosPitch = (float) Math.cos(pitch);
+        float sinPitch = (float) Math.sin(pitch);
+        float sinYaw = (float) Math.sin(yaw);
+        float cosYaw = (float) Math.cos(yaw);
+
+        // Camera-facing billboard basis. The center remains fixed in world space.
+        float rightX = cosYaw;
+        float rightY = 0f;
+        float rightZ = sinYaw;
+
+        float upX = -sinYaw * sinPitch;
+        float upY = cosPitch;
+        float upZ = cosYaw * sinPitch;
+
+        GLES20.glUseProgram(sunProgram);
+
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(
+                GLES20.GL_SRC_ALPHA,
+                GLES20.GL_ONE
+        );
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+
+        GLES20.glUniformMatrix4fv(
+                sunMvpHandle,
+                1,
+                false,
+                getViewProjectionMatrix(),
+                0
+        );
+
+        GLES20.glUniform3f(
+                sunCenterHandle,
+                sunX,
+                sunY,
+                sunZ
+        );
+
+        GLES20.glUniform3f(
+                sunRightHandle,
+                rightX,
+                rightY,
+                rightZ
+        );
+
+        GLES20.glUniform3f(
+                sunUpHandle,
+                upX,
+                upY,
+                upZ
+        );
+
+        GLES20.glUniform1f(
+                sunSizeHandle,
+                7.0f
+        );
+
+        sunBuffer.position(0);
+        GLES20.glVertexAttribPointer(
+                sunPositionHandle,
+                2,
+                GLES20.GL_FLOAT,
+                false,
+                0,
+                sunBuffer
+        );
+        GLES20.glEnableVertexAttribArray(sunPositionHandle);
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                6
+        );
+
+        GLES20.glDisableVertexAttribArray(sunPositionHandle);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glUseProgram(program);
+    }
+
+    private float[] getViewProjectionMatrix() {
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                view,
+                0
+        );
+        return mvp;
     }
 
     // --------------------------------------------------
