@@ -89,6 +89,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int lightDirHandle;
     private int ambientLightHandle;
 
+    // Step 3A-2: keep ground tiles visually flat so tile color variation does not
+    // create artificial triangular shading across the field.
+    private boolean groundFlatColor = false;
+
     // First-person camera
     private float cameraX = 0f;
     private float cameraY = 1.7f;
@@ -508,7 +512,13 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             );
         }
 
+        // Step 3A-2: ground uses a flat per-tile color. This prevents the shared
+        // cube shading from producing large triangular patches across the field.
+        groundFlatColor = true;
+        GLES20.glUniform1f(ambientLightHandle, 1.0f);
         drawGround();
+        groundFlatColor = false;
+        GLES20.glUniform1f(ambientLightHandle, 0.72f);
 
         // --------------------------------------------------
         // TREES
@@ -1057,37 +1067,37 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private void drawGround() {
 
-        // Step 3A: subtle natural color variation using adjacent ground tiles.
-        // The existing world shader, lighting, haze, trees and rocks remain unchanged.
+        // Step 3A-2: subtle green variation with no strong tile-to-tile contrast.
+        // The tiles remain adjacent and the existing ground geometry is preserved.
         final float tileSize = 20f;
         final float y = -0.08f;
 
         drawCube(-20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.236f, 0.556f, 0.206f, 1f);
+                0.240f, 0.560f, 0.210f, 1f);
 
         drawCube(0f, y, -20f, tileSize, 0.16f, tileSize,
-                0.241f, 0.565f, 0.212f, 1f);
+                0.242f, 0.564f, 0.212f, 1f);
 
         drawCube(20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.238f, 0.561f, 0.209f, 1f);
+                0.239f, 0.558f, 0.209f, 1f);
 
         drawCube(-20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.243f, 0.568f, 0.214f, 1f);
+                0.243f, 0.566f, 0.213f, 1f);
 
         drawCube(0f, y, 0f, tileSize, 0.16f, tileSize,
-                0.240f, 0.563f, 0.210f, 1f);
+                0.241f, 0.562f, 0.211f, 1f);
 
         drawCube(20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.237f, 0.559f, 0.207f, 1f);
+                0.238f, 0.557f, 0.208f, 1f);
 
         drawCube(-20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.242f, 0.566f, 0.213f, 1f);
+                0.242f, 0.563f, 0.212f, 1f);
 
         drawCube(0f, y, 20f, tileSize, 0.16f, tileSize,
-                0.244f, 0.570f, 0.216f, 1f);
+                0.244f, 0.567f, 0.214f, 1f);
 
         drawCube(20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.235f, 0.554f, 0.205f, 1f);
+                0.239f, 0.559f, 0.209f, 1f);
     }
 
     // --------------------------------------------------
@@ -1763,9 +1773,11 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         ) {
 
             float shade =
-                    0.86f +
-                    0.14f *
-                    ((i % 6) / 5f);
+                    groundFlatColor
+                            ? 1.0f
+                            : 0.86f +
+                              0.14f *
+                              ((i % 6) / 5f);
 
             colorData[i * 4] =
                     r * shade;
