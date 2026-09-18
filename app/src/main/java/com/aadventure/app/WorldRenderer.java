@@ -134,10 +134,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
                 "varying float vLight;" +
+                "varying vec3 vWorldPos;" +
                 "void main() {" +
                 "    vec4 eyePos = uView * aPosition;" +
                 "    gl_Position = uMVP * aPosition;" +
                 "    vColor = aColor;" +
+                "    vWorldPos = aPosition.xyz;" +
                 "    vDistance = length(eyePos.xyz);" +
                 "    vec3 pseudoNormal = normalize(vec3(aPosition.x, aPosition.y * 1.35, aPosition.z));" +
                 "    float diffuse = max(dot(pseudoNormal, normalize(uLightDir)), 0.0);" +
@@ -149,10 +151,24 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
                 "varying float vLight;" +
+                "varying vec3 vWorldPos;" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
                 "    vec3 litColor = vColor.rgb * vLight;" +
+                "    // Step 3A-4: subtle close-range natural ground surface detail." +
+                "    float groundMask = 1.0 - smoothstep(0.05, 0.24, abs(vWorldPos.y + 0.08));" +
+                "    float detailA = 0.5 + 0.5 * sin(vWorldPos.x * 5.7 + sin(vWorldPos.z * 3.9));" +
+                "    float detailB = 0.5 + 0.5 * cos(vWorldPos.z * 6.4 - sin(vWorldPos.x * 4.6));" +
+                "    float detailC = 0.5 + 0.5 * sin(vWorldPos.x * 11.0 + vWorldPos.z * 8.5 + sin(vWorldPos.z * 2.7));" +
+                "    float surfaceDetail = 0.52 * detailA + 0.33 * detailB + 0.15 * detailC;" +
+                "    surfaceDetail = smoothstep(0.56, 0.78, surfaceDetail);" +
+                "    float closeFade = 1.0 - smoothstep(20.0, 52.0, vDistance);" +
+                "    float detailStrength = surfaceDetail * closeFade * groundMask * 0.075;" +
+                "    vec3 grassHighlight = vec3(0.040, 0.055, 0.018);" +
+                "    vec3 soilHint = vec3(0.028, 0.020, 0.010);" +
+                "    float warmBalance = 0.35 + 0.65 * detailB;" +
+                "    litColor += mix(grassHighlight, soilHint, warmBalance) * detailStrength;" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
                 "    vec3 finalColor = mix(litColor, hazeColor, haze);" +
                 "    gl_FragColor = vec4(finalColor, vColor.a);" +
