@@ -18,6 +18,11 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private FloatBuffer cubeBuffer;
     private FloatBuffer sphereBuffer;
     private FloatBuffer rockBuffer;
+    private FloatBuffer skyBuffer;
+
+    private int skyProgram;
+    private int skyPositionHandle;
+    private int skyMvpHandle;
 
     private int sphereVertexCount;
     private int rockVertexCount;
@@ -40,10 +45,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             javax.microedition.khronos.opengles.GL10 gl,
             javax.microedition.khronos.egl.EGLConfig config) {
 
+        // The sky is rendered as a smooth vertical gradient in Step 2A.
+        // Keep a blue fallback clear color underneath it.
         GLES20.glClearColor(
-                0.38f,
-                0.67f,
-                0.88f,
+                0.52f,
+                0.74f,
+                0.92f,
                 1f
         );
 
@@ -107,6 +114,56 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         program,
                         "uMVP"
                 );
+
+        String skyVertexShaderCode =
+                "attribute vec4 aPosition;" +
+                "uniform mat4 uMVP;" +
+                "varying float vSkyY;" +
+                "void main() {" +
+                "    gl_Position = aPosition;" +
+                "    vSkyY = aPosition.y;" +
+                "}";
+
+        String skyFragmentShaderCode =
+                "precision mediump float;" +
+                "varying float vSkyY;" +
+                "void main() {" +
+                "    float t = clamp((vSkyY + 1.0) * 0.5, 0.0, 1.0);" +
+                "    float horizon = smoothstep(0.0, 0.58, t);" +
+                "    vec3 horizonColor = vec3(0.78, 0.88, 0.96);" +
+                "    vec3 topColor = vec3(0.18, 0.45, 0.78);" +
+                "    vec3 skyColor = mix(horizonColor, topColor, horizon);" +
+                "    gl_FragColor = vec4(skyColor, 1.0);" +
+                "}";
+
+        int skyVertexShader = loadShader(
+                GLES20.GL_VERTEX_SHADER,
+                skyVertexShaderCode
+        );
+
+        int skyFragmentShader = loadShader(
+                GLES20.GL_FRAGMENT_SHADER,
+                skyFragmentShaderCode
+        );
+
+        skyProgram = GLES20.glCreateProgram();
+        GLES20.glAttachShader(skyProgram, skyVertexShader);
+        GLES20.glAttachShader(skyProgram, skyFragmentShader);
+        GLES20.glLinkProgram(skyProgram);
+
+        skyPositionHandle =
+                GLES20.glGetAttribLocation(
+                        skyProgram,
+                        "aPosition"
+                );
+
+        skyMvpHandle =
+                GLES20.glGetUniformLocation(
+                        skyProgram,
+                        "uMVP"
+                );
+
+        createSky();
 
         createCube();
 
@@ -189,6 +246,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 1f,
                 0f
         );
+
+        drawSky();
 
         drawGround();
 
@@ -413,6 +472,57 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         if (pitch < -limit) {
             pitch = -limit;
         }
+    }
+
+    // --------------------------------------------------
+    // SKY - STEP 2A
+    // --------------------------------------------------
+
+    private void createSky() {
+        float[] vertices = {
+                -1f, -1f, 0f,
+                 1f, -1f, 0f,
+                -1f,  1f, 0f,
+                 1f,  1f, 0f
+        };
+
+        skyBuffer =
+                ByteBuffer
+                        .allocateDirect(vertices.length * 4)
+                        .order(ByteOrder.nativeOrder())
+                        .asFloatBuffer();
+
+        skyBuffer.put(vertices).position(0);
+    }
+
+    private void drawSky() {
+        // Draw the gradient behind the entire 3D world.
+        // It is deliberately screen-filling in 2A; sun/clouds remain future steps.
+        GLES20.glDisable(GLES20.GL_DEPTH_TEST);
+        GLES20.glUseProgram(skyProgram);
+
+        skyBuffer.position(0);
+        GLES20.glVertexAttribPointer(
+                skyPositionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                0,
+                skyBuffer
+        );
+        GLES20.glEnableVertexAttribArray(skyPositionHandle);
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLE_STRIP,
+                0,
+                4
+        );
+
+        GLES20.glDisableVertexAttribArray(skyPositionHandle);
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+
+        // Restore the normal world shader for ground, trees and rocks.
+        GLES20.glUseProgram(program);
     }
 
     // --------------------------------------------------
