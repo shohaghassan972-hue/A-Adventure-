@@ -34,6 +34,38 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int sunUpHandle;
     private int sunSizeHandle;
 
+    // Natural world-space clouds (Step 2C)
+    private FloatBuffer cloudBuffer;
+    private int cloudProgram;
+    private int cloudPositionHandle;
+    private int cloudVpHandle;
+    private int cloudCenterHandle;
+    private int cloudRightHandle;
+    private int cloudUpHandle;
+    private int cloudSizeHandle;
+    private int cloudColorHandle;
+
+    private static class Cloud {
+        final float x, y, z, scale;
+
+        Cloud(float x, float y, float z, float scale) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.scale = scale;
+        }
+    }
+
+    private final Cloud[] clouds = {
+            new Cloud(-22f, 18f, -34f, 1.00f),
+            new Cloud(-8f, 22f, -48f, 1.25f),
+            new Cloud(10f, 19f, -38f, 0.95f),
+            new Cloud(25f, 23f, -58f, 1.35f),
+            new Cloud(-28f, 25f, -68f, 1.45f),
+            new Cloud(2f, 26f, -82f, 1.55f),
+            new Cloud(30f, 18f, -88f, 1.10f)
+    };
+
     private int sphereVertexCount;
     private int rockVertexCount;
 
@@ -253,8 +285,58 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                         "uSize"
                 );
 
+        String cloudVertexShaderCode =
+                "attribute vec2 aPosition;" +
+                "uniform mat4 uVP;" +
+                "uniform vec3 uCenter;" +
+                "uniform vec3 uRight;" +
+                "uniform vec3 uUp;" +
+                "uniform float uSize;" +
+                "varying vec2 vLocal;" +
+                "void main() {" +
+                "    vec3 worldPos = uCenter + uRight * aPosition.x * uSize + uUp * aPosition.y * uSize;" +
+                "    gl_Position = uVP * vec4(worldPos, 1.0);" +
+                "    vLocal = aPosition;" +
+                "}";
+
+        String cloudFragmentShaderCode =
+                "precision mediump float;" +
+                "varying vec2 vLocal;" +
+                "uniform vec4 uColor;" +
+                "void main() {" +
+                "    float d = length(vLocal);" +
+                "    float alpha = 1.0 - smoothstep(0.45, 1.0, d);" +
+                "    alpha *= 0.78;" +
+                "    if (alpha < 0.015) discard;" +
+                "    gl_FragColor = vec4(uColor.rgb, uColor.a * alpha);" +
+                "}";
+
+        int cloudVertexShader = loadShader(
+                GLES20.GL_VERTEX_SHADER,
+                cloudVertexShaderCode
+        );
+
+        int cloudFragmentShader = loadShader(
+                GLES20.GL_FRAGMENT_SHADER,
+                cloudFragmentShaderCode
+        );
+
+        cloudProgram = GLES20.glCreateProgram();
+        GLES20.glAttachShader(cloudProgram, cloudVertexShader);
+        GLES20.glAttachShader(cloudProgram, cloudFragmentShader);
+        GLES20.glLinkProgram(cloudProgram);
+
+        cloudPositionHandle = GLES20.glGetAttribLocation(cloudProgram, "aPosition");
+        cloudVpHandle = GLES20.glGetUniformLocation(cloudProgram, "uVP");
+        cloudCenterHandle = GLES20.glGetUniformLocation(cloudProgram, "uCenter");
+        cloudRightHandle = GLES20.glGetUniformLocation(cloudProgram, "uRight");
+        cloudUpHandle = GLES20.glGetUniformLocation(cloudProgram, "uUp");
+        cloudSizeHandle = GLES20.glGetUniformLocation(cloudProgram, "uSize");
+        cloudColorHandle = GLES20.glGetUniformLocation(cloudProgram, "uColor");
+
         createSky();
         createSun();
+        createCloud();
 
         createCube();
 
@@ -340,6 +422,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
         drawSky();
         drawSun();
+        drawClouds();
 
         drawGround();
 
@@ -735,6 +818,144 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 0
         );
         return mvp;
+    }
+
+    // --------------------------------------------------
+    // CLOUDS - STEP 2C
+    // --------------------------------------------------
+
+    private void createCloud() {
+        float[] vertices = {
+                -1f, -1f,
+                 1f, -1f,
+                -1f,  1f,
+                 1f, -1f,
+                 1f,  1f,
+                -1f,  1f
+        };
+
+        cloudBuffer =
+                ByteBuffer
+                        .allocateDirect(vertices.length * 4)
+                        .order(ByteOrder.nativeOrder())
+                        .asFloatBuffer();
+
+        cloudBuffer.put(vertices).position(0);
+    }
+
+    private void drawClouds() {
+        float cosPitch = (float) Math.cos(pitch);
+        float sinPitch = (float) Math.sin(pitch);
+        float sinYaw = (float) Math.sin(yaw);
+        float cosYaw = (float) Math.cos(yaw);
+
+        // Camera-facing basis. Cloud centers themselves remain fixed in world space.
+        float rightX = cosYaw;
+        float rightY = 0f;
+        float rightZ = sinYaw;
+
+        float upX = -sinYaw * sinPitch;
+        float upY = cosPitch;
+        float upZ = cosYaw * sinPitch;
+
+        cloudBuffer.position(0);
+        GLES20.glUseProgram(cloudProgram);
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(
+                GLES20.GL_SRC_ALPHA,
+                GLES20.GL_ONE_MINUS_SRC_ALPHA
+        );
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+        GLES20.glDepthMask(false);
+
+        GLES20.glUniformMatrix4fv(
+                cloudVpHandle,
+                1,
+                false,
+                getViewProjectionMatrix(),
+                0
+        );
+
+        GLES20.glUniform3f(
+                cloudRightHandle,
+                rightX, rightY, rightZ
+        );
+
+        GLES20.glUniform3f(
+                cloudUpHandle,
+                upX, upY, upZ
+        );
+
+        GLES20.glUniform4f(
+                cloudColorHandle,
+                0.98f, 0.99f, 1.0f, 0.92f
+        );
+
+        for (Cloud cloud : clouds) {
+            drawCloudPuff(cloud.x, cloud.y, cloud.z, cloud.scale, rightX, rightY, rightZ, upX, upY, upZ);
+        }
+
+        GLES20.glDepthMask(true);
+        GLES20.glDisable(GLES20.GL_BLEND);
+        GLES20.glUseProgram(program);
+    }
+
+    private void drawCloudPuff(
+            float centerX,
+            float centerY,
+            float centerZ,
+            float scale,
+            float rightX,
+            float rightY,
+            float rightZ,
+            float upX,
+            float upY,
+            float upZ) {
+
+        // A compact cluster of overlapping soft puffs makes each cloud less geometric.
+        float[][] puffs = {
+                {-0.95f, -0.02f, 0.82f},
+                {-0.45f,  0.20f, 1.05f},
+                { 0.00f,  0.28f, 1.18f},
+                { 0.48f,  0.16f, 1.00f},
+                { 0.90f, -0.02f, 0.76f},
+                { 0.18f, -0.08f, 0.95f}
+        };
+
+        for (float[] puff : puffs) {
+            float px = centerX + rightX * puff[0] * scale + upX * puff[1] * scale;
+            float py = centerY + rightY * puff[0] * scale + upY * puff[1] * scale;
+            float pz = centerZ + rightZ * puff[0] * scale + upZ * puff[1] * scale;
+
+            GLES20.glUniform3f(
+                    cloudCenterHandle,
+                    px, py, pz
+            );
+
+            GLES20.glUniform1f(
+                    cloudSizeHandle,
+                    puff[2] * scale
+            );
+
+            cloudBuffer.position(0);
+            GLES20.glVertexAttribPointer(
+                    cloudPositionHandle,
+                    2,
+                    GLES20.GL_FLOAT,
+                    false,
+                    0,
+                    cloudBuffer
+            );
+            GLES20.glEnableVertexAttribArray(cloudPositionHandle);
+
+            GLES20.glDrawArrays(
+                    GLES20.GL_TRIANGLES,
+                    0,
+                    6
+            );
+
+            GLES20.glDisableVertexAttribArray(cloudPositionHandle);
+        }
     }
 
     // --------------------------------------------------
