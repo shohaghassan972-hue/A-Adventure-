@@ -87,6 +87,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int colorHandle;
     private int mvpHandle;
     private int viewHandle;
+    private int lightDirHandle;
+    private int ambientLightHandle;
 
     // First-person camera
     private float cameraX = 0f;
@@ -117,24 +119,32 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "attribute vec4 aColor;" +
                 "uniform mat4 uMVP;" +
                 "uniform mat4 uView;" +
+                "uniform vec3 uLightDir;" +
+                "uniform float uAmbientLight;" +
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
+                "varying float vLight;" +
                 "void main() {" +
                 "    vec4 eyePos = uView * aPosition;" +
                 "    gl_Position = uMVP * aPosition;" +
                 "    vColor = aColor;" +
                 "    vDistance = length(eyePos.xyz);" +
+                "    vec3 pseudoNormal = normalize(vec3(aPosition.x, aPosition.y * 1.35, aPosition.z));" +
+                "    float diffuse = max(dot(pseudoNormal, normalize(uLightDir)), 0.0);" +
+                "    vLight = uAmbientLight + diffuse * (1.0 - uAmbientLight);" +
                 "}";
 
         String fragmentShaderCode =
                 "precision mediump float;" +
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
+                "varying float vLight;" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
+                "    vec3 litColor = vColor.rgb * vLight;" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
-                "    vec3 finalColor = mix(vColor.rgb, hazeColor, haze);" +
+                "    vec3 finalColor = mix(litColor, hazeColor, haze);" +
                 "    gl_FragColor = vec4(finalColor, vColor.a);" +
                 "}";
 
@@ -184,6 +194,18 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.glGetUniformLocation(
                         program,
                         "uView"
+                );
+
+        lightDirHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uLightDir"
+                );
+
+        ambientLightHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uAmbientLight"
                 );
 
         String skyVertexShaderCode =
@@ -462,6 +484,21 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 false,
                 view,
                 0
+        );
+
+        // Step 2E: soft directional daylight from the visible sun direction.
+        // A generous ambient level keeps the world readable while the directional
+        // component adds gentle light/shade variation to ground, trunks, foliage and rocks.
+        GLES20.glUniform3f(
+                lightDirHandle,
+                0.0f,
+                0.42f,
+                -0.91f
+        );
+
+        GLES20.glUniform1f(
+                ambientLightHandle,
+                0.72f
         );
 
         drawGround();
