@@ -1151,53 +1151,54 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         /*
          * Step 3A-3: Natural earth-tone variation.
          *
-         * Use smooth 2D noise-like fields instead of directional waves.
-         * This creates small, soft, irregular patches that read as subtle
-         * soil/earth variation without forming visible stripes or grid lines.
+         * Use several smooth, non-directional noise fields.  The earth tone
+         * is deliberately muted and localized: from far away the field still
+         * reads as green, while nearby ground shows small warm soil variations.
          */
-        float broadNoise =
+        float noiseA =
                 0.5f +
                 0.5f * (float) Math.sin(
-                        x * 0.34f +
-                        1.35f * (float) Math.sin(z * 0.27f)
+                        x * 0.82f +
+                        1.10f * (float) Math.sin(z * 0.57f + 0.8f)
                 );
 
-        float crossNoise =
+        float noiseB =
                 0.5f +
                 0.5f * (float) Math.cos(
-                        z * 0.39f -
-                        1.15f * (float) Math.sin(x * 0.23f)
+                        z * 1.05f -
+                        0.90f * (float) Math.sin(x * 0.63f - 0.5f)
                 );
 
-        float fineNoise =
+        float noiseC =
                 0.5f +
                 0.5f * (float) Math.sin(
-                        x * 0.78f +
-                        z * 0.61f +
-                        0.85f * (float) Math.sin(x * 0.31f - z * 0.22f)
+                        x * 1.42f +
+                        z * 1.18f +
+                        0.75f * (float) Math.cos(x * 0.46f - z * 0.52f)
                 );
 
         float patch =
-                0.52f * broadNoise +
-                0.33f * crossNoise +
-                0.15f * fineNoise;
+                0.46f * noiseA +
+                0.36f * noiseB +
+                0.18f * noiseC;
 
-        // Keep earth tones sparse and very softly blended into the grass.
+        // Localized soft patches; the upper limit stays low enough that green
+        // remains the dominant field color at normal viewing distance.
         float earthMask =
                 smoothStep(
-                        0.60f,
-                        0.82f,
+                        0.56f,
+                        0.73f,
                         patch
-                ) * 0.30f;
+                ) * 0.42f;
 
         final float baseR = 0.250f;
         final float baseG = 0.552f;
         final float baseB = 0.200f;
 
-        // Muted warm earth tone; never replaces the dominant green field.
-        final float earthR = 0.390f;
-        final float earthG = 0.370f;
-        final float earthB = 0.145f;
+        // Warm muted soil/earth tone. It is blended rather than painted on.
+        final float earthR = 0.430f;
+        final float earthG = 0.325f;
+        final float earthB = 0.120f;
 
         colors[colorIndex] =
                 baseR +
