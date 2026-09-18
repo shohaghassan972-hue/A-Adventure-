@@ -85,7 +85,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int positionHandle;
     private int colorHandle;
     private int mvpHandle;
-    private int modelHandle;
     private int viewHandle;
     private int lightDirHandle;
     private int ambientLightHandle;
@@ -149,6 +148,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying float vDistance;" +
                 "varying float vLight;" +
                 "varying vec3 vWorldPos;" +
+                "uniform float uGroundDetail;" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
@@ -160,7 +160,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float patch = sin(vWorldPos.x * 1.37 + vWorldPos.z * 1.11) * 0.018;" +
                 "        baseColor *= (1.0 + variation + patch);" +
                 "    }" +
-                "    vec3 litColor = baseColor * vLight;" +
+                "    vec3 litColor = baseColor * vLight;
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
                 "    vec3 finalColor = mix(litColor, hazeColor, haze);" +
                 "    gl_FragColor = vec4(finalColor, vColor.a);" +
