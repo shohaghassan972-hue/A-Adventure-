@@ -3,7 +3,6 @@ package com.aadventure.app;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
 import android.view.MotionEvent;
 import android.view.View;
 
