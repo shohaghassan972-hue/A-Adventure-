@@ -86,6 +86,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int positionHandle;
     private int colorHandle;
     private int mvpHandle;
+    private int viewHandle;
 
     // First-person camera
     private float cameraX = 0f;
@@ -115,26 +116,24 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "attribute vec4 aPosition;" +
                 "attribute vec4 aColor;" +
                 "uniform mat4 uMVP;" +
+                "uniform mat4 uView;" +
                 "varying vec4 vColor;" +
+                "varying float vDistance;" +
                 "void main() {" +
+                "    vec4 eyePos = uView * aPosition;" +
                 "    gl_Position = uMVP * aPosition;" +
                 "    vColor = aColor;" +
+                "    vDistance = length(eyePos.xyz);" +
                 "}";
 
         String fragmentShaderCode =
                 "precision mediump float;" +
                 "varying vec4 vColor;" +
+                "varying float vDistance;" +
                 "void main() {" +
-                "    // Step 2D: lightweight distance-based atmospheric haze." +
-                "    // Use the depth buffer so the effect follows real world geometry." +
-                "    float depth = gl_FragCoord.z * 2.0 - 1.0;" +
-                "    float nearPlane = 0.1;" +
-                "    float farPlane = 150.0;" +
-                "    float viewDepth = (2.0 * nearPlane * farPlane) /" +
-                "        (farPlane + nearPlane - depth * (farPlane - nearPlane));" +
-                "    float haze = smoothstep(24.0, 105.0, viewDepth);" +
-                "    haze = haze * 0.78;" +
-                "    vec3 hazeColor = vec3(0.74, 0.84, 0.94);" +
+                "    float haze = smoothstep(65.0, 115.0, vDistance);" +
+                "    haze *= 0.18;" +
+                "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
                 "    vec3 finalColor = mix(vColor.rgb, hazeColor, haze);" +
                 "    gl_FragColor = vec4(finalColor, vColor.a);" +
                 "}";
@@ -179,6 +178,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.glGetUniformLocation(
                         program,
                         "uMVP"
+                );
+
+        viewHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uView"
                 );
 
         String skyVertexShaderCode =
@@ -448,6 +453,17 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         drawSun();
         drawClouds();
 
+        // Set the camera matrix once for the shared world shader.
+        // The haze is deliberately very subtle and only affects distant geometry.
+        GLES20.glUseProgram(program);
+        GLES20.glUniformMatrix4fv(
+                viewHandle,
+                1,
+                false,
+                view,
+                0
+        );
+
         drawGround();
 
         // --------------------------------------------------
@@ -672,12 +688,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
             pitch = -limit;
         }
     }
-
-    // --------------------------------------------------
-    // ATMOSPHERIC HAZE - STEP 2D
-    // --------------------------------------------------
-    // Haze is implemented in the main world fragment shader above.
-    // Sky, sun and clouds use their own shaders and remain unchanged.
 
     // --------------------------------------------------
     // SKY - STEP 2A
