@@ -7,374 +7,1758 @@ import android.opengl.Matrix;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 
 public class WorldRenderer implements GLSurfaceView.Renderer {
 
-    private static final float DEG = (float) Math.PI / 180.0f;
+    private final float[] projection = new float[16];
+    private final float[] view = new float[16];
+    private final float[] model = new float[16];
+    private final float[] mvp = new float[16];
 
-    private final float[] viewMatrix = new float[16];
-    private final float[] projectionMatrix = new float[16];
-    private final float[] vpMatrix = new float[16];
-    private final float[] modelMatrix = new float[16];
-    private final float[] mvpMatrix = new float[16];
+    private FloatBuffer cubeBuffer;
+    private FloatBuffer sphereBuffer;
+    private FloatBuffer rockBuffer;
 
-    private float cameraX = 0.0f;
-    private float cameraY = 1.65f;
-    private float cameraZ = 4.0f;
-
-    private float yaw = 0.0f;
-    private float pitch = 0.0f;
-
-    private final List<Tree> trees = new ArrayList<>();
-    private final List<Rock> rocks = new ArrayList<>();
+    private int sphereVertexCount;
+    private int rockVertexCount;
 
     private int program;
     private int positionHandle;
     private int colorHandle;
     private int mvpHandle;
 
-    private FloatBuffer cubeBuffer;
-    private FloatBuffer rockBuffer;
+    // First-person camera
+    private float cameraX = 0f;
+    private float cameraY = 1.7f;
+    private float cameraZ = 8f;
 
-    private static class Tree {
-        float x, z, s;
-        Tree(float x, float z, float s) {
-            this.x = x;
-            this.z = z;
-            this.s = s;
-        }
-    }
-
-    private static class Rock {
-        float x, z, s;
-        Rock(float x, float z, float s) {
-            this.x = x;
-            this.z = z;
-            this.s = s;
-        }
-    }
+    private float yaw = 0f;
 
     @Override
-    public void onSurfaceCreated(javax.microedition.khronos.egl.EGLConfig config) {
-        GLES20.glClearColor(0.42f, 0.68f, 0.92f, 1.0f);
-        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
-        GLES20.glDepthFunc(GLES20.GL_LEQUAL);
+    public void onSurfaceCreated(
+            javax.microedition.khronos.opengles.GL10 gl,
+            javax.microedition.khronos.egl.EGLConfig config) {
 
-        program = createProgram(VERTEX_SHADER, FRAGMENT_SHADER);
-        positionHandle = GLES20.glGetAttribLocation(program, "aPosition");
-        colorHandle = GLES20.glGetUniformLocation(program, "uColor");
-        mvpHandle = GLES20.glGetUniformLocation(program, "uMVP");
-
-        cubeBuffer = createFloatBuffer(CUBE_VERTICES);
-        rockBuffer = createFloatBuffer(ROCK_VERTICES);
-
-        generateWorld();
-    }
-
-    @Override
-    public void onSurfaceChanged(javax.microedition.khronos.opengles.GL10 gl, int width, int height) {
-        GLES20.glViewport(0, 0, width, height);
-
-        float aspect = (float) width / Math.max(1, height);
-        Matrix.perspectiveM(projectionMatrix, 0, 70.0f, aspect, 0.1f, 300.0f);
-    }
-
-    @Override
-    public void onDrawFrame(javax.microedition.khronos.opengles.GL10 gl) {
-        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
-
-        updateCameraMatrix();
-
-        GLES20.glUseProgram(program);
-
-        drawGround();
-        drawWorldObjects();
-    }
-
-    private void updateCameraMatrix() {
-        float yawRad = yaw * DEG;
-        float pitchRad = pitch * DEG;
-
-        float cosPitch = (float) Math.cos(pitchRad);
-        float sinPitch = (float) Math.sin(pitchRad);
-        float sinYaw = (float) Math.sin(yawRad);
-        float cosYaw = (float) Math.cos(yawRad);
-
-        float lookX = cameraX + cosPitch * sinYaw;
-        float lookY = cameraY + sinPitch;
-        float lookZ = cameraZ - cosPitch * cosYaw;
-
-        Matrix.setLookAtM(
-                viewMatrix,
-                0,
-                cameraX, cameraY, cameraZ,
-                lookX, lookY, lookZ,
-                0.0f, 1.0f, 0.0f
+        GLES20.glClearColor(
+                0.38f,
+                0.67f,
+                0.88f,
+                1f
         );
 
-        Matrix.multiplyMM(vpMatrix, 0, projectionMatrix, 0, viewMatrix, 0);
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+
+        String vertexShaderCode =
+                "attribute vec4 aPosition;" +
+                "attribute vec4 aColor;" +
+                "uniform mat4 uMVP;" +
+                "varying vec4 vColor;" +
+                "void main() {" +
+                "    gl_Position = uMVP * aPosition;" +
+                "    vColor = aColor;" +
+                "}";
+
+        String fragmentShaderCode =
+                "precision mediump float;" +
+                "varying vec4 vColor;" +
+                "void main() {" +
+                "    gl_FragColor = vColor;" +
+                "}";
+
+        int vertexShader = loadShader(
+                GLES20.GL_VERTEX_SHADER,
+                vertexShaderCode
+        );
+
+        int fragmentShader = loadShader(
+                GLES20.GL_FRAGMENT_SHADER,
+                fragmentShaderCode
+        );
+
+        program = GLES20.glCreateProgram();
+
+        GLES20.glAttachShader(
+                program,
+                vertexShader
+        );
+
+        GLES20.glAttachShader(
+                program,
+                fragmentShader
+        );
+
+        GLES20.glLinkProgram(program);
+
+        positionHandle =
+                GLES20.glGetAttribLocation(
+                        program,
+                        "aPosition"
+                );
+
+        colorHandle =
+                GLES20.glGetAttribLocation(
+                        program,
+                        "aColor"
+                );
+
+        mvpHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uMVP"
+                );
+
+        createCube();
+
+        createSphere(
+                8,
+                12
+        );
+
+        // New irregular 3D rock geometry
+        createRock();
     }
+
+    @Override
+    public void onSurfaceChanged(
+            javax.microedition.khronos.opengles.GL10 gl,
+            int width,
+            int height) {
+
+        GLES20.glViewport(
+                0,
+                0,
+                width,
+                height
+        );
+
+        float ratio =
+                (float) width /
+                (float) height;
+
+        Matrix.perspectiveM(
+                projection,
+                0,
+                70f,
+                ratio,
+                0.1f,
+                150f
+        );
+    }
+
+    @Override
+    public void onDrawFrame(
+            javax.microedition.khronos.opengles.GL10 gl) {
+
+        GLES20.glClear(
+                GLES20.GL_COLOR_BUFFER_BIT |
+                GLES20.GL_DEPTH_BUFFER_BIT
+        );
+
+        float lookX =
+                cameraX +
+                (float) Math.sin(yaw);
+
+        float lookY =
+                cameraY;
+
+        float lookZ =
+                cameraZ -
+                (float) Math.cos(yaw);
+
+        Matrix.setLookAtM(
+                view,
+                0,
+
+                cameraX,
+                cameraY,
+                cameraZ,
+
+                lookX,
+                lookY,
+                lookZ,
+
+                0f,
+                1f,
+                0f
+        );
+
+        drawGround();
+
+        // --------------------------------------------------
+        // TREES
+        // --------------------------------------------------
+
+        drawTree(
+                -12f,
+                0f,
+                -12f,
+                1.15f
+        );
+
+        drawTree(
+                -4f,
+                0f,
+                -16f,
+                0.90f
+        );
+
+        drawTree(
+                5f,
+                0f,
+                -14f,
+                1.05f
+        );
+
+        drawTree(
+                14f,
+                0f,
+                -11f,
+                0.95f
+        );
+
+        drawTree(
+                -16f,
+                0f,
+                -2f,
+                0.85f
+        );
+
+        drawTree(
+                -7f,
+                0f,
+                -5f,
+                0.72f
+        );
+
+        drawTree(
+                7f,
+                0f,
+                -4f,
+                0.82f
+        );
+
+        drawTree(
+                16f,
+                0f,
+                -1f,
+                1.10f
+        );
+
+        drawTree(
+                -13f,
+                0f,
+                8f,
+                0.95f
+        );
+
+        drawTree(
+                -2f,
+                0f,
+                11f,
+                1.10f
+        );
+
+        drawTree(
+                10f,
+                0f,
+                9f,
+                0.88f
+        );
+
+        drawTree(
+                17f,
+                0f,
+                12f,
+                0.75f
+        );
+
+        // --------------------------------------------------
+        // REALISTIC ROCKS
+        // --------------------------------------------------
+
+        drawRock(
+                -8f,
+                0f,
+                -10f,
+                1.0f,
+                0.65f,
+                0.8f,
+                8f
+        );
+
+        drawRock(
+                2f,
+                0f,
+                -9f,
+                0.75f,
+                0.48f,
+                0.65f,
+                -12f
+        );
+
+        drawRock(
+                11f,
+                0f,
+                -7f,
+                1.15f,
+                0.62f,
+                0.82f,
+                18f
+        );
+
+        drawRock(
+                -12f,
+                0f,
+                3f,
+                0.90f,
+                0.52f,
+                0.70f,
+                -20f
+        );
+
+        drawRock(
+                5f,
+                0f,
+                4f,
+                1.0f,
+                0.55f,
+                0.85f,
+                10f
+        );
+
+        drawRock(
+                14f,
+                0f,
+                6f,
+                0.78f,
+                0.45f,
+                0.68f,
+                -15f
+        );
+    }
+
+    // --------------------------------------------------
+    // MOVEMENT
+    // --------------------------------------------------
+
+    public void addMovement(
+            float forward,
+            float side) {
+
+        float sin =
+                (float) Math.sin(yaw);
+
+        float cos =
+                (float) Math.cos(yaw);
+
+        cameraX += sin * forward;
+        cameraZ -= cos * forward;
+
+        cameraX += cos * side;
+        cameraZ += sin * side;
+
+        cameraX =
+                Math.max(
+                        -28f,
+                        Math.min(
+                                28f,
+                                cameraX
+                        )
+                );
+
+        cameraZ =
+                Math.max(
+                        -28f,
+                        Math.min(
+                                28f,
+                                cameraZ
+                        )
+                );
+    }
+
+    // --------------------------------------------------
+    // CAMERA
+    // --------------------------------------------------
 
     public void addYaw(float amount) {
         yaw += amount;
-        if (yaw > 360.0f) yaw -= 360.0f;
-        if (yaw < -360.0f) yaw += 360.0f;
     }
 
-    public void addPitch(float amount) {
-        pitch += amount;
-
-        // Nearly straight up/down, avoiding the look-at singularity at exactly 90°.
-        if (pitch > 89.0f) pitch = 89.0f;
-        if (pitch < -89.0f) pitch = -89.0f;
-    }
-
-    public void addMovement(float forward, float side) {
-        float yawRad = yaw * DEG;
-
-        float forwardX = (float) Math.sin(yawRad);
-        float forwardZ = -(float) Math.cos(yawRad);
-
-        float rightX = (float) Math.cos(yawRad);
-        float rightZ = (float) Math.sin(yawRad);
-
-        cameraX += forwardX * forward + rightX * side;
-        cameraZ += forwardZ * forward + rightZ * side;
-
-        // Keep the camera inside the simple test world.
-        cameraX = clamp(cameraX, -90.0f, 90.0f);
-        cameraZ = clamp(cameraZ, -90.0f, 90.0f);
-    }
-
-    private void generateWorld() {
-        Random random = new Random(20260917L);
-
-        trees.clear();
-        rocks.clear();
-
-        for (int i = 0; i < 55; i++) {
-            float x = -75.0f + random.nextFloat() * 150.0f;
-            float z = -75.0f + random.nextFloat() * 150.0f;
-
-            if (Math.abs(x) < 7.0f && Math.abs(z - 4.0f) < 7.0f) {
-                continue;
-            }
-
-            float scale = 0.8f + random.nextFloat() * 0.8f;
-            trees.add(new Tree(x, z, scale));
-        }
-
-        for (int i = 0; i < 45; i++) {
-            float x = -80.0f + random.nextFloat() * 160.0f;
-            float z = -80.0f + random.nextFloat() * 160.0f;
-
-            float scale = 0.5f + random.nextFloat() * 0.9f;
-            rocks.add(new Rock(x, z, scale));
-        }
-    }
+    // --------------------------------------------------
+    // GROUND
+    // --------------------------------------------------
 
     private void drawGround() {
-        Matrix.setIdentityM(modelMatrix, 0);
-        Matrix.translateM(modelMatrix, 0, 0.0f, -0.08f, 0.0f);
-        Matrix.scaleM(modelMatrix, 0, 180.0f, 0.1f, 180.0f);
 
-        drawCube(modelMatrix, 0.25f, 0.52f, 0.20f, 1.0f);
-    }
+        drawCube(
+                0f,
+                -0.08f,
+                0f,
 
-    private void drawWorldObjects() {
-        for (Tree tree : trees) {
-            drawTree(tree);
-        }
+                60f,
+                0.16f,
+                60f,
 
-        for (Rock rock : rocks) {
-            drawRock(rock);
-        }
-    }
-
-    private void drawTree(Tree tree) {
-        // Trunk
-        Matrix.setIdentityM(modelMatrix, 0);
-        Matrix.translateM(modelMatrix, 0, tree.x, 1.0f * tree.s, tree.z);
-        Matrix.scaleM(modelMatrix, 0, 0.35f * tree.s, 1.0f * tree.s, 0.35f * tree.s);
-        drawCube(modelMatrix, 0.32f, 0.18f, 0.08f, 1.0f);
-
-        // Main foliage
-        Matrix.setIdentityM(modelMatrix, 0);
-        Matrix.translateM(modelMatrix, 0, tree.x, 2.15f * tree.s, tree.z);
-        Matrix.scaleM(modelMatrix, 0, 1.25f * tree.s, 1.25f * tree.s, 1.25f * tree.s);
-        drawCube(modelMatrix, 0.08f, 0.38f, 0.10f, 1.0f);
-
-        // Side foliage masses
-        Matrix.setIdentityM(modelMatrix, 0);
-        Matrix.translateM(modelMatrix, 0,
-                tree.x - 0.75f * tree.s,
-                1.85f * tree.s,
-                tree.z);
-        Matrix.scaleM(modelMatrix, 0,
-                0.75f * tree.s,
-                0.75f * tree.s,
-                0.75f * tree.s);
-        drawCube(modelMatrix, 0.10f, 0.42f, 0.12f, 1.0f);
-
-        Matrix.setIdentityM(modelMatrix, 0);
-        Matrix.translateM(modelMatrix, 0,
-                tree.x + 0.75f * tree.s,
-                1.85f * tree.s,
-                tree.z);
-        Matrix.scaleM(modelMatrix, 0,
-                0.75f * tree.s,
-                0.75f * tree.s,
-                0.75f * tree.s);
-        drawCube(modelMatrix, 0.10f, 0.42f, 0.12f, 1.0f);
-    }
-
-    private void drawRock(Rock rock) {
-        Matrix.setIdentityM(modelMatrix, 0);
-        Matrix.translateM(modelMatrix, 0, rock.x, 0.35f * rock.s, rock.z);
-        Matrix.scaleM(modelMatrix, 0,
-                1.15f * rock.s,
-                0.55f * rock.s,
-                0.95f * rock.s);
-
-        drawRockMesh(modelMatrix, 0.35f, 0.34f, 0.30f, 1.0f);
-    }
-
-    private void drawCube(float[] model, float r, float g, float b, float a) {
-        Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, model, 0);
-        GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0);
-        GLES20.glUniform4f(colorHandle, r, g, b, a);
-
-        cubeBuffer.position(0);
-        GLES20.glVertexAttribPointer(
-                positionHandle,
-                3,
-                GLES20.GL_FLOAT,
-                false,
-                0,
-                cubeBuffer
+                0.22f,
+                0.55f,
+                0.20f,
+                1f
         );
-        GLES20.glEnableVertexAttribArray(positionHandle);
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, CUBE_VERTICES.length / 3);
-        GLES20.glDisableVertexAttribArray(positionHandle);
     }
 
-    private void drawRockMesh(float[] model, float r, float g, float b, float a) {
-        Matrix.multiplyMM(mvpMatrix, 0, vpMatrix, 0, model, 0);
-        GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0);
-        GLES20.glUniform4f(colorHandle, r, g, b, a);
+    // --------------------------------------------------
+    // TREE
+    // --------------------------------------------------
+
+    private void drawTree(
+            float x,
+            float y,
+            float z,
+            float s) {
+
+        // Main trunk
+        drawCube(
+                x,
+                y + 1.35f * s,
+                z,
+
+                0.62f * s,
+                2.70f * s,
+                0.62f * s,
+
+                0.30f,
+                0.15f,
+                0.07f,
+                1f
+        );
+
+        // Lower branch
+        drawBranch(
+                x - 0.25f * s,
+                y + 1.65f * s,
+                z,
+
+                0.95f * s,
+                0.16f * s,
+                0.16f * s,
+
+                -28f,
+                0f,
+                -32f
+        );
+
+        // Upper left branch
+        drawBranch(
+                x - 0.18f * s,
+                y + 2.20f * s,
+                z,
+
+                0.75f * s,
+                0.14f * s,
+                0.14f * s,
+
+                24f,
+                0f,
+                38f
+        );
+
+        // Upper right branch
+        drawBranch(
+                x + 0.18f * s,
+                y + 2.30f * s,
+                z,
+
+                0.78f * s,
+                0.14f * s,
+                0.14f * s,
+
+                -22f,
+                0f,
+                -42f
+        );
+
+        // Main crown
+        drawSphere(
+                x,
+                y + 3.15f * s,
+                z,
+
+                1.15f * s,
+
+                0.08f,
+                0.43f,
+                0.09f,
+                1f
+        );
+
+        // Left crown
+        drawSphere(
+                x - 0.72f * s,
+                y + 2.85f * s,
+                z + 0.12f * s,
+
+                0.82f * s,
+
+                0.06f,
+                0.36f,
+                0.07f,
+                1f
+        );
+
+        // Right crown
+        drawSphere(
+                x + 0.75f * s,
+                y + 2.88f * s,
+                z - 0.08f * s,
+
+                0.86f * s,
+
+                0.07f,
+                0.39f,
+                0.08f,
+                1f
+        );
+
+        // Top crown
+        drawSphere(
+                x - 0.20f * s,
+                y + 3.75f * s,
+                z,
+
+                0.78f * s,
+
+                0.09f,
+                0.47f,
+                0.10f,
+                1f
+        );
+
+        // Front/right crown
+        drawSphere(
+                x + 0.48f * s,
+                y + 3.52f * s,
+                z + 0.25f * s,
+
+                0.65f * s,
+
+                0.07f,
+                0.40f,
+                0.08f,
+                1f
+        );
+
+        // Lower foliage
+        drawSphere(
+                x - 0.45f * s,
+                y + 2.55f * s,
+                z - 0.18f * s,
+
+                0.55f * s,
+
+                0.055f,
+                0.32f,
+                0.065f,
+                1f
+        );
+    }
+
+    // --------------------------------------------------
+    // BRANCH
+    // --------------------------------------------------
+
+    private void drawBranch(
+            float x,
+            float y,
+            float z,
+
+            float length,
+            float thickness,
+            float depth,
+
+            float rotX,
+            float rotY,
+            float rotZ) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotY,
+                0f,
+                1f,
+                0f
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotZ,
+                0f,
+                0f,
+                1f
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotX,
+                1f,
+                0f,
+                0f
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                length,
+                thickness,
+                depth
+        );
+
+        drawCurrentModel(
+                0.28f,
+                0.13f,
+                0.055f,
+                1f
+        );
+    }
+
+    // --------------------------------------------------
+    // REALISTIC ROCK
+    // --------------------------------------------------
+
+    private void drawRock(
+            float x,
+            float y,
+            float z,
+            float sx,
+            float sy,
+            float sz,
+            float rotation) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y + sy * 0.42f,
+                z
+        );
+
+        Matrix.rotateM(
+                model,
+                0,
+                rotation,
+                0f,
+                1f,
+                0f
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                sx,
+                sy,
+                sz
+        );
+
+        drawRockModel(
+                0.30f,
+                0.30f,
+                0.27f,
+                1f
+        );
+    }
+
+    // --------------------------------------------------
+    // ROCK MODEL
+    // --------------------------------------------------
+
+    private void drawRockModel(
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                mvp,
+                0
+        );
+
+        GLES20.glUseProgram(
+                program
+        );
+
+        GLES20.glUniformMatrix4fv(
+                mvpHandle,
+                1,
+                false,
+                mvp,
+                0
+        );
 
         rockBuffer.position(0);
+
         GLES20.glVertexAttribPointer(
                 positionHandle,
                 3,
                 GLES20.GL_FLOAT,
                 false,
-                0,
+                3 * 4,
                 rockBuffer
         );
-        GLES20.glEnableVertexAttribArray(positionHandle);
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, ROCK_VERTICES.length / 3);
-        GLES20.glDisableVertexAttribArray(positionHandle);
-    }
 
-    private static FloatBuffer createFloatBuffer(float[] data) {
-        ByteBuffer bb = ByteBuffer.allocateDirect(data.length * 4);
-        bb.order(ByteOrder.nativeOrder());
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
 
-        FloatBuffer buffer = bb.asFloatBuffer();
-        buffer.put(data);
-        buffer.position(0);
-        return buffer;
-    }
+        float[] colors =
+                new float[
+                        rockVertexCount * 4
+                ];
 
-    private static float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
+        for (
+                int i = 0;
+                i < rockVertexCount;
+                i++
+        ) {
 
-    private static int createProgram(String vertexSource, String fragmentSource) {
-        int vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexSource);
-        int fragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource);
+            // Different faces get slightly different shades.
+            float shade =
+                    0.72f +
+                    0.28f *
+                    ((i % 8) / 7f);
 
-        int p = GLES20.glCreateProgram();
-        GLES20.glAttachShader(p, vertexShader);
-        GLES20.glAttachShader(p, fragmentShader);
-        GLES20.glLinkProgram(p);
+            colors[i * 4] =
+                    r * shade;
 
-        int[] status = new int[1];
-        GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, status, 0);
+            colors[i * 4 + 1] =
+                    g * shade;
 
-        if (status[0] == 0) {
-            String error = GLES20.glGetProgramInfoLog(p);
-            GLES20.glDeleteProgram(p);
-            throw new RuntimeException("Program link failed: " + error);
+            colors[i * 4 + 2] =
+                    b * shade;
+
+            colors[i * 4 + 3] =
+                    a;
         }
 
-        return p;
+        FloatBuffer colorBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                colors.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        colorBuffer
+                .put(colors)
+                .position(0);
+
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                colorBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                colorHandle
+        );
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                rockVertexCount
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                positionHandle
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                colorHandle
+        );
     }
 
-    private static int loadShader(int type, String source) {
-        int shader = GLES20.glCreateShader(type);
-        GLES20.glShaderSource(shader, source);
-        GLES20.glCompileShader(shader);
+    // --------------------------------------------------
+    // CUBE
+    // --------------------------------------------------
 
-        int[] status = new int[1];
-        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0);
+    private void drawCube(
+            float x,
+            float y,
+            float z,
 
-        if (status[0] == 0) {
-            String error = GLES20.glGetShaderInfoLog(shader);
-            GLES20.glDeleteShader(shader);
-            throw new RuntimeException("Shader compile failed: " + error);
+            float sx,
+            float sy,
+            float sz,
+
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                sx,
+                sy,
+                sz
+        );
+
+        drawCurrentModel(
+                r,
+                g,
+                b,
+                a
+        );
+    }
+
+    // --------------------------------------------------
+    // SPHERE
+    // --------------------------------------------------
+
+    private void drawSphere(
+            float x,
+            float y,
+            float z,
+            float scale,
+
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.setIdentityM(
+                model,
+                0
+        );
+
+        Matrix.translateM(
+                model,
+                0,
+                x,
+                y,
+                z
+        );
+
+        Matrix.scaleM(
+                model,
+                0,
+                scale,
+                scale,
+                scale
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                mvp,
+                0
+        );
+
+        GLES20.glUseProgram(
+                program
+        );
+
+        GLES20.glUniformMatrix4fv(
+                mvpHandle,
+                1,
+                false,
+                mvp,
+                0
+        );
+
+        sphereBuffer.position(0);
+
+        GLES20.glVertexAttribPointer(
+                positionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                3 * 4,
+                sphereBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
+
+        float[] colors =
+                new float[
+                        sphereVertexCount * 4
+                ];
+
+        for (
+                int i = 0;
+                i < sphereVertexCount;
+                i++
+        ) {
+
+            float shade =
+                    0.82f +
+                    0.18f *
+                    ((i % 7) / 6f);
+
+            colors[i * 4] =
+                    r * shade;
+
+            colors[i * 4 + 1] =
+                    g * shade;
+
+            colors[i * 4 + 2] =
+                    b * shade;
+
+            colors[i * 4 + 3] =
+                    a;
         }
+
+        FloatBuffer colorBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                colors.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        colorBuffer
+                .put(colors)
+                .position(0);
+
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                colorBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                colorHandle
+        );
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                sphereVertexCount
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                positionHandle
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                colorHandle
+        );
+    }
+
+    // --------------------------------------------------
+    // CURRENT CUBE MODEL
+    // --------------------------------------------------
+
+    private void drawCurrentModel(
+            float r,
+            float g,
+            float b,
+            float a) {
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                view,
+                0,
+                model,
+                0
+        );
+
+        Matrix.multiplyMM(
+                mvp,
+                0,
+                projection,
+                0,
+                mvp,
+                0
+        );
+
+        GLES20.glUseProgram(
+                program
+        );
+
+        GLES20.glUniformMatrix4fv(
+                mvpHandle,
+                1,
+                false,
+                mvp,
+                0
+        );
+
+        cubeBuffer.position(0);
+
+        GLES20.glVertexAttribPointer(
+                positionHandle,
+                3,
+                GLES20.GL_FLOAT,
+                false,
+                3 * 4,
+                cubeBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                positionHandle
+        );
+
+        float[] colorData =
+                new float[
+                        36 * 4
+                ];
+
+        for (
+                int i = 0;
+                i < 36;
+                i++
+        ) {
+
+            float shade =
+                    0.86f +
+                    0.14f *
+                    ((i % 6) / 5f);
+
+            colorData[i * 4] =
+                    r * shade;
+
+            colorData[i * 4 + 1] =
+                    g * shade;
+
+            colorData[i * 4 + 2] =
+                    b * shade;
+
+            colorData[i * 4 + 3] =
+                    a;
+        }
+
+        FloatBuffer colorBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                colorData.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        colorBuffer
+                .put(colorData)
+                .position(0);
+
+        GLES20.glVertexAttribPointer(
+                colorHandle,
+                4,
+                GLES20.GL_FLOAT,
+                false,
+                4 * 4,
+                colorBuffer
+        );
+
+        GLES20.glEnableVertexAttribArray(
+                colorHandle
+        );
+
+        GLES20.glDrawArrays(
+                GLES20.GL_TRIANGLES,
+                0,
+                36
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                positionHandle
+        );
+
+        GLES20.glDisableVertexAttribArray(
+                colorHandle
+        );
+    }
+
+    // --------------------------------------------------
+    // CUBE GEOMETRY
+    // --------------------------------------------------
+
+    private void createCube() {
+
+        float[] vertices = {
+
+                // Front
+                -0.5f,-0.5f, 0.5f,
+                 0.5f,-0.5f, 0.5f,
+                 0.5f, 0.5f, 0.5f,
+
+                -0.5f,-0.5f, 0.5f,
+                 0.5f, 0.5f, 0.5f,
+                -0.5f, 0.5f, 0.5f,
+
+                // Back
+                 0.5f,-0.5f,-0.5f,
+                -0.5f,-0.5f,-0.5f,
+                -0.5f, 0.5f,-0.5f,
+
+                 0.5f,-0.5f,-0.5f,
+                -0.5f, 0.5f,-0.5f,
+                 0.5f, 0.5f,-0.5f,
+
+                // Top
+                -0.5f, 0.5f, 0.5f,
+                 0.5f, 0.5f, 0.5f,
+                 0.5f, 0.5f,-0.5f,
+
+                -0.5f, 0.5f, 0.5f,
+                 0.5f, 0.5f,-0.5f,
+                -0.5f, 0.5f,-0.5f,
+
+                // Bottom
+                -0.5f,-0.5f,-0.5f,
+                 0.5f,-0.5f,-0.5f,
+                 0.5f,-0.5f, 0.5f,
+
+                -0.5f,-0.5f,-0.5f,
+                 0.5f,-0.5f, 0.5f,
+                -0.5f,-0.5f, 0.5f,
+
+                // Right
+                 0.5f,-0.5f, 0.5f,
+                 0.5f,-0.5f,-0.5f,
+                 0.5f, 0.5f,-0.5f,
+
+                 0.5f,-0.5f, 0.5f,
+                 0.5f, 0.5f,-0.5f,
+                 0.5f, 0.5f, 0.5f,
+
+                // Left
+                -0.5f,-0.5f,-0.5f,
+                -0.5f,-0.5f, 0.5f,
+                -0.5f, 0.5f, 0.5f,
+
+                -0.5f,-0.5f,-0.5f,
+                -0.5f, 0.5f, 0.5f,
+                -0.5f, 0.5f,-0.5f
+        };
+
+        cubeBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        cubeBuffer
+                .put(vertices)
+                .position(0);
+    }
+
+    // --------------------------------------------------
+    // SPHERE GEOMETRY
+    // --------------------------------------------------
+
+    private void createSphere(
+            int stacks,
+            int slices) {
+
+        float[] vertices =
+                new float[
+                        stacks *
+                        slices *
+                        6 *
+                        3
+                ];
+
+        int index = 0;
+
+        for (
+                int i = 0;
+                i < stacks;
+                i++
+        ) {
+
+            float v0 =
+                    (float) i /
+                    stacks;
+
+            float v1 =
+                    (float) (i + 1) /
+                    stacks;
+
+            float phi0 =
+                    (float)
+                    (Math.PI * v0);
+
+            float phi1 =
+                    (float)
+                    (Math.PI * v1);
+
+            for (
+                    int j = 0;
+                    j < slices;
+                    j++
+            ) {
+
+                float u0 =
+                        (float) j /
+                        slices;
+
+                float u1 =
+                        (float) (j + 1) /
+                        slices;
+
+                float theta0 =
+                        (float)
+                        (2.0 *
+                        Math.PI *
+                        u0);
+
+                float theta1 =
+                        (float)
+                        (2.0 *
+                        Math.PI *
+                        u1);
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi0,
+                                theta0
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi1,
+                                theta0
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi1,
+                                theta1
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi0,
+                                theta0
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi1,
+                                theta1
+                        );
+
+                index =
+                        putSphereVertex(
+                                vertices,
+                                index,
+                                phi0,
+                                theta1
+                        );
+            }
+        }
+
+        sphereVertexCount =
+                index / 3;
+
+        sphereBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        sphereBuffer
+                .put(vertices)
+                .position(0);
+    }
+
+    private int putSphereVertex(
+            float[] data,
+            int index,
+            float phi,
+            float theta) {
+
+        float sinPhi =
+                (float)
+                Math.sin(phi);
+
+        data[index++] =
+                sinPhi *
+                (float)
+                Math.cos(theta);
+
+        data[index++] =
+                (float)
+                Math.cos(phi);
+
+        data[index++] =
+                sinPhi *
+                (float)
+                Math.sin(theta);
+
+        return index;
+    }
+
+    // --------------------------------------------------
+    // IRREGULAR ROCK GEOMETRY
+    // --------------------------------------------------
+
+    private void createRock() {
+
+        /*
+         * Rock structure:
+         *
+         *          top
+         *           /\
+         *       ___/  \___
+         *      /          \
+         *     /            \
+         *    /______________\
+         *
+         * Multiple irregular rings make a
+         * natural low-poly boulder.
+         */
+
+        final int sides = 8;
+
+        // 8 top triangles
+        // 8 x 8 middle triangles = 64
+        // 8 bottom triangles
+        // Total = 80 triangles = 240 vertices
+        float[] vertices =
+                new float[
+                        80 * 3 * 3
+                ];
+
+        int index = 0;
+
+        float[] ring1Radius = {
+                0.72f,
+                0.88f,
+                0.80f,
+                0.95f,
+                0.76f,
+                0.90f,
+                0.84f,
+                0.78f
+        };
+
+        float[] ring2Radius = {
+                0.92f,
+                1.00f,
+                0.86f,
+                1.05f,
+                0.90f,
+                0.98f,
+                0.88f,
+                0.94f
+        };
+
+        float[] angleOffset = {
+                0.00f,
+                0.08f,
+                -0.05f,
+                0.06f,
+                -0.04f,
+                0.07f,
+                -0.06f,
+                0.03f
+        };
+
+        // --------------------------------------------------
+        // TOP TO RING 1
+        // --------------------------------------------------
+
+        for (
+                int i = 0;
+                i < sides;
+                i++
+        ) {
+
+            int next =
+                    (i + 1) % sides;
+
+            float a0 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    i /
+                    sides)
+                    + angleOffset[i];
+
+            float a1 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    next /
+                    sides)
+                    + angleOffset[next];
+
+            // Top vertex
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            0f,
+                            1.05f,
+                            0f
+                    );
+
+            // Ring 1 vertex
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) *
+                            ring1Radius[i],
+                            0.45f +
+                            ((i % 3) * 0.04f),
+                            (float)
+                            Math.sin(a0) *
+                            ring1Radius[i]
+                    );
+
+            // Next ring 1 vertex
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) *
+                            ring1Radius[next],
+                            0.45f +
+                            ((next % 3) * 0.04f),
+                            (float)
+                            Math.sin(a1) *
+                            ring1Radius[next]
+                    );
+        }
+
+        // --------------------------------------------------
+        // RING 1 TO RING 2
+        // --------------------------------------------------
+
+        for (
+                int i = 0;
+                i < sides;
+                i++
+        ) {
+
+            int next =
+                    (i + 1) % sides;
+
+            float a0 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    i /
+                    sides)
+                    + angleOffset[i];
+
+            float a1 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    next /
+                    sides)
+                    + angleOffset[next];
+
+            float r10 =
+                    ring1Radius[i];
+
+            float r11 =
+                    ring1Radius[next];
+
+            float r20 =
+                    ring2Radius[i];
+
+            float r21 =
+                    ring2Radius[next];
+
+            float y10 =
+                    0.45f +
+                    ((i % 3) * 0.04f);
+
+            float y11 =
+                    0.45f +
+                    ((next % 3) * 0.04f);
+
+            float y20 =
+                    0.05f +
+                    ((i % 2) * 0.03f);
+
+            float y21 =
+                    0.05f +
+                    ((next % 2) * 0.03f);
+
+            // Triangle 1
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) * r10,
+                            y10,
+                            (float)
+                            Math.sin(a0) * r10
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) * r20,
+                            y20,
+                            (float)
+                            Math.sin(a0) * r20
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) * r21,
+                            y21,
+                            (float)
+                            Math.sin(a1) * r21
+                    );
+
+            // Triangle 2
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) * r10,
+                            y10,
+                            (float)
+                            Math.sin(a0) * r10
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) * r21,
+                            y21,
+                            (float)
+                            Math.sin(a1) * r21
+                    );
+
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) * r11,
+                            y11,
+                            (float)
+                            Math.sin(a1) * r11
+                    );
+        }
+
+        // --------------------------------------------------
+        // RING 2 TO BOTTOM
+        // --------------------------------------------------
+
+        for (
+                int i = 0;
+                i < sides;
+                i++
+        ) {
+
+            int next =
+                    (i + 1) % sides;
+
+            float a0 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    i /
+                    sides)
+                    + angleOffset[i];
+
+            float a1 =
+                    (float)
+                    (2.0 *
+                    Math.PI *
+                    next /
+                    sides)
+                    + angleOffset[next];
+
+            // Ring 2
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a0) *
+                            ring2Radius[i],
+                            0.05f,
+                            (float)
+                            Math.sin(a0) *
+                            ring2Radius[i]
+                    );
+
+            // Bottom center
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            0f,
+                            -0.10f,
+                            0f
+                    );
+
+            // Next ring 2
+            index =
+                    putVertex(
+                            vertices,
+                            index,
+                            (float)
+                            Math.cos(a1) *
+                            ring2Radius[next],
+                            0.05f,
+                            (float)
+                            Math.sin(a1) *
+                            ring2Radius[next]
+                    );
+        }
+
+        rockVertexCount =
+                index / 3;
+
+        rockBuffer =
+                ByteBuffer
+                        .allocateDirect(
+                                vertices.length * 4
+                        )
+                        .order(
+                                ByteOrder.nativeOrder()
+                        )
+                        .asFloatBuffer();
+
+        rockBuffer
+                .put(vertices)
+                .position(0);
+    }
+
+    private int putVertex(
+            float[] data,
+            int index,
+            float x,
+            float y,
+            float z) {
+
+        data[index++] = x;
+        data[index++] = y;
+        data[index++] = z;
+
+        return index;
+    }
+
+    // --------------------------------------------------
+    // SHADER
+    // --------------------------------------------------
+
+    private int loadShader(
+            int type,
+            String shaderCode) {
+
+        int shader =
+                GLES20.glCreateShader(type);
+
+        GLES20.glShaderSource(
+                shader,
+                shaderCode
+        );
+
+        GLES20.glCompileShader(
+                shader
+        );
 
         return shader;
     }
-
-    private static final String VERTEX_SHADER =
-            "attribute vec4 aPosition;\n" +
-            "uniform mat4 uMVP;\n" +
-            "void main() {\n" +
-            "    gl_Position = uMVP * aPosition;\n" +
-            "}\n";
-
-    private static final String FRAGMENT_SHADER =
-            "precision mediump float;\n" +
-            "uniform vec4 uColor;\n" +
-            "void main() {\n" +
-            "    gl_FragColor = uColor;\n" +
-            "}\n";
-
-    private static final float[] CUBE_VERTICES = {
-            -1,-1,-1,  1,-1,-1,  1, 1,-1,
-            -1,-1,-1,  1, 1,-1, -1, 1,-1,
-
-            -1,-1, 1,  1, 1, 1,  1,-1, 1,
-            -1,-1, 1, -1, 1, 1,  1, 1, 1,
-
-            -1,-1,-1, -1, 1,-1, -1, 1, 1,
-            -1,-1,-1, -1, 1, 1, -1,-1, 1,
-
-             1,-1,-1,  1,-1, 1,  1, 1, 1,
-             1,-1,-1,  1, 1, 1,  1, 1,-1,
-
-            -1, 1,-1,  1, 1,-1,  1, 1, 1,
-            -1, 1,-1,  1, 1, 1, -1, 1, 1,
-
-            -1,-1,-1, -1,-1, 1,  1,-1, 1,
-            -1,-1,-1,  1,-1, 1,  1,-1,-1
-    };
-
-    private static final float[] ROCK_VERTICES = {
-             0, 1, 0,  -1,-0.2f,-0.8f,  0.8f,-0.3f,-0.6f,
-             0, 1, 0,   0.8f,-0.3f,-0.6f,  1,-0.1f,0.5f,
-             0, 1, 0,   1,-0.1f,0.5f,  -0.2f,-0.25f,1,
-             0, 1, 0,  -0.2f,-0.25f,1,  -1,-0.2f,-0.8f,
-
-             0,-0.8f,0,   0.8f,-0.3f,-0.6f,  -1,-0.2f,-0.8f,
-             0,-0.8f,0,   1,-0.1f,0.5f,  0.8f,-0.3f,-0.6f,
-             0,-0.8f,0,  -0.2f,-0.25f,1,  1,-0.1f,0.5f,
-             0,-0.8f,0,  -1,-0.2f,-0.8f,  -0.2f,-0.25f,1
-    };
-}
+            }
