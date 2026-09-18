@@ -56,14 +56,27 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         }
     }
 
+    // Clouds are distributed around the player/world in multiple directions
+    // so a 360-degree camera turn does not leave the sky empty on one side.
     private final Cloud[] clouds = {
-            new Cloud(-22f, 18f, -34f, 1.00f),
-            new Cloud(-8f, 22f, -48f, 1.25f),
-            new Cloud(10f, 19f, -38f, 0.95f),
-            new Cloud(25f, 23f, -58f, 1.35f),
-            new Cloud(-28f, 25f, -68f, 1.45f),
-            new Cloud(2f, 26f, -82f, 1.55f),
-            new Cloud(30f, 18f, -88f, 1.10f)
+            new Cloud(0f,   21f, -32f, 1.15f),
+            new Cloud(-18f, 24f, -28f, 1.00f),
+            new Cloud(20f,  19f, -30f, 1.25f),
+            new Cloud(34f,  23f, -12f, 1.35f),
+            new Cloud(38f,  20f,  10f, 1.10f),
+            new Cloud(30f,  25f,  28f, 1.45f),
+            new Cloud(8f,   22f,  36f, 1.20f),
+            new Cloud(-14f, 26f,  34f, 1.40f),
+            new Cloud(-34f, 21f,  24f, 1.10f),
+            new Cloud(-40f, 24f,   4f, 1.35f),
+            new Cloud(-36f, 19f, -16f, 1.00f),
+            new Cloud(-28f, 27f, -34f, 1.50f),
+            new Cloud(12f,  28f, -52f, 1.30f),
+            new Cloud(42f,  26f, -42f, 1.20f),
+            new Cloud(48f,  22f,  22f, 1.35f),
+            new Cloud(-48f, 25f,  30f, 1.25f),
+            new Cloud(-50f, 23f, -28f, 1.40f),
+            new Cloud(0f,   24f,  52f, 1.10f)
     };
 
     private int sphereVertexCount;
