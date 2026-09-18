@@ -131,6 +131,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying float vDistance;" +
                 "varying float vLight;" +
                 "varying vec3 vWorldPos;" +
+                "uniform float uGroundDetail;" +
                 "void main() {" +
                 "    vec4 eyePos = uView * aPosition;" +
                 "    gl_Position = uMVP * aPosition;" +
