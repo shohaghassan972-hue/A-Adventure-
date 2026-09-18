@@ -33,6 +33,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private float cameraZ = 8f;
 
     private float yaw = 0f;
+    private float pitch = 0f;
 
     @Override
     public void onSurfaceCreated(
@@ -154,16 +155,23 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
+        float cosPitch =
+                (float) Math.cos(pitch);
+
+        float sinPitch =
+                (float) Math.sin(pitch);
+
         float lookX =
                 cameraX +
-                (float) Math.sin(yaw);
+                cosPitch * (float) Math.sin(yaw);
 
         float lookY =
-                cameraY;
+                cameraY +
+                sinPitch;
 
         float lookZ =
                 cameraZ -
-                (float) Math.cos(yaw);
+                cosPitch * (float) Math.cos(yaw);
 
         Matrix.setLookAtM(
                 view,
@@ -382,6 +390,29 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     public void addYaw(float amount) {
         yaw += amount;
+
+        if (yaw > (float) (Math.PI * 2.0)) {
+            yaw -= (float) (Math.PI * 2.0);
+        }
+
+        if (yaw < (float) (-Math.PI * 2.0)) {
+            yaw += (float) (Math.PI * 2.0);
+        }
+    }
+
+    public void addPitch(float amount) {
+        pitch += amount;
+
+        // Keep the camera just short of the exact vertical poles.
+        float limit = (float) (Math.PI / 2.0 - 0.02);
+
+        if (pitch > limit) {
+            pitch = limit;
+        }
+
+        if (pitch < -limit) {
+            pitch = -limit;
+        }
     }
 
     // --------------------------------------------------
