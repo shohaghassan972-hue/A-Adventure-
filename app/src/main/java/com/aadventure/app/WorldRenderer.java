@@ -1063,31 +1063,31 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         final float y = -0.08f;
 
         drawCube(-20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.235f, 0.555f, 0.205f, 1f);
+                0.236f, 0.556f, 0.206f, 1f);
 
         drawCube(0f, y, -20f, tileSize, 0.16f, tileSize,
-                0.245f, 0.575f, 0.220f, 1f);
+                0.241f, 0.565f, 0.212f, 1f);
 
         drawCube(20f, y, -20f, tileSize, 0.16f, tileSize,
-                0.240f, 0.565f, 0.215f, 1f);
+                0.238f, 0.561f, 0.209f, 1f);
 
         drawCube(-20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.245f, 0.570f, 0.215f, 1f);
+                0.243f, 0.568f, 0.214f, 1f);
 
         drawCube(0f, y, 0f, tileSize, 0.16f, tileSize,
-                0.240f, 0.570f, 0.215f, 1f);
+                0.240f, 0.563f, 0.210f, 1f);
 
         drawCube(20f, y, 0f, tileSize, 0.16f, tileSize,
-                0.235f, 0.565f, 0.205f, 1f);
+                0.237f, 0.559f, 0.207f, 1f);
 
         drawCube(-20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.240f, 0.565f, 0.205f, 1f);
+                0.242f, 0.566f, 0.213f, 1f);
 
         drawCube(0f, y, 20f, tileSize, 0.16f, tileSize,
-                0.250f, 0.580f, 0.220f, 1f);
+                0.244f, 0.570f, 0.216f, 1f);
 
         drawCube(20f, y, 20f, tileSize, 0.16f, tileSize,
-                0.235f, 0.555f, 0.195f, 1f);
+                0.235f, 0.554f, 0.205f, 1f);
     }
 
     // --------------------------------------------------
