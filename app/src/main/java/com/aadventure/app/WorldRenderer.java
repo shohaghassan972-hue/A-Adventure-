@@ -165,7 +165,11 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 // The interpolation keeps the result smooth while the hashed cell values
                 // prevent the same stripe/wave shape from marching across the ground.
                 "float groundHash(vec2 p) {" +
-                "    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);" +
+                "    float h = dot(p, vec2(127.1, 311.7));" +
+                "    h = fract(h * 0.1031);" +
+                "    h *= h + 33.33;" +
+                "    h *= h + 0.12345;" +
+                "    return fract(h);" +
                 "}" +
                 "float groundNoise(vec2 p) {" +
                 "    vec2 i = floor(p);" +
@@ -213,8 +217,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float grassFine = grassA * 0.55 + grassB * 0.45;" +
                 "        float grassMask = smoothstep(0.30, 0.76, grassFine);" +
                 "        float grassShade = (grassMask - 0.5) * 0.045 * detailBalance;" +
-                // Extra close-range micro variation makes small grass-like flecks visible
-                // near the camera without creating a repeating line/band pattern.
+                // Keep the existing close detail; the expensive trig hash was optimized
+                // below so these fields can remain without the previous GPU cost.
                 "        float grassMicroA = groundNoiseRotated(vGroundXZ * 15.0 + vec2(19.0, 71.0));" +
                 "        float grassMicroB = groundNoise(vGroundXZ * 22.0 + vec2(47.0, 83.0));" +
                 "        float grassMicro = grassMicroA * 0.58 + grassMicroB * 0.42;" +
@@ -232,8 +236,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float soilMicro = groundNoise(vGroundXZ * 6.8 + vec2(71.0, 37.0));" +
                 "        float soilField = soilA * 0.48 + soilB * 0.37 + soilMicro * 0.15;" +
                 "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055 * detailBalance;" +
-                // A separate close-range soil micro field gives small warm earth specks
-                // without turning the mid/far ground brown or noisy.
+                // Keep the close soil fields; their noise hash is now cheaper, so the
+                // detail remains while reducing the mobile fragment cost.
                 "        float soilCloseA = groundNoise(vGroundXZ * 9.5 + vec2(53.0, 31.0));" +
                 "        float soilCloseB = groundNoiseRotated(vGroundXZ * 13.5 + vec2(89.0, 11.0));" +
                 "        float soilCloseField = soilCloseA * 0.60 + soilCloseB * 0.40;" +
