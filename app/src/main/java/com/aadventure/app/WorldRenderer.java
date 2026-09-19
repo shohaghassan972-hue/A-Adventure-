@@ -198,10 +198,11 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 // reduce detail through the mid range, and let far ground read as a
                 // smooth green field. This does not change the Step 3B-3 noise fields;
                 // it only controls how strongly the existing detail reaches the eye.
-                "        float closeDetail = 1.0 - smoothstep(14.0, 52.0, vDistance);" +
-                "        float midDetail = 1.0 - smoothstep(28.0, 78.0, vDistance);" +
-                "        float detailBalance = closeDetail * 0.78 + midDetail * 0.22;" +
+                "        float closeDetail = 1.0 - smoothstep(12.0, 52.0, vDistance);" +
+                "        float midDetail = 1.0 - smoothstep(30.0, 78.0, vDistance);" +
+                "        float detailBalance = closeDetail * 0.80 + midDetail * 0.20;" +
                 "        detailBalance = clamp(detailBalance, 0.0, 1.0);" +
+                "        float closeMicro = 1.0 - smoothstep(7.0, 30.0, vDistance);" +
                 "        float surfaceLow = groundNoiseRotated(vGroundXZ * 0.72);" +
                 "        float surfaceMid = groundNoise(vGroundXZ * 1.55 + vec2(31.0, 13.0));" +
                 "        float surfaceFine = groundNoiseRotated(vGroundXZ * 4.6 + vec2(7.0, 23.0));" +
@@ -212,7 +213,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float grassFine = grassA * 0.55 + grassB * 0.45;" +
                 "        float grassMask = smoothstep(0.30, 0.76, grassFine);" +
                 "        float grassShade = (grassMask - 0.5) * 0.045 * detailBalance;" +
-                "        float greenVariation = (surface - 0.5) * 0.070 + grassShade;" +
+                // Extra close-range micro variation makes small grass-like flecks visible
+                // near the camera without creating a repeating line/band pattern.
+                "        float grassMicroA = groundNoiseRotated(vGroundXZ * 15.0 + vec2(19.0, 71.0));" +
+                "        float grassMicroB = groundNoise(vGroundXZ * 22.0 + vec2(47.0, 83.0));" +
+                "        float grassMicro = grassMicroA * 0.58 + grassMicroB * 0.42;" +
+                "        float grassMicroMask = smoothstep(0.42, 0.72, grassMicro);" +
+                "        float grassMicroShade = (grassMicroMask - 0.5) * 0.060 * closeMicro;" +
+                "        float greenVariation = (surface - 0.5) * 0.070 + grassShade + grassMicroShade;" +
                 "        finalColor *= 1.0 + greenVariation;" +
                 "        float softEarthNoise = groundNoiseRotated(vGroundXZ * 3.2 + vec2(43.0, 19.0));" +
                 "        float softEarth = smoothstep(0.80, 0.96, softEarthNoise) * 0.028 * detailBalance;" +
@@ -224,8 +232,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float soilMicro = groundNoise(vGroundXZ * 6.8 + vec2(71.0, 37.0));" +
                 "        float soilField = soilA * 0.48 + soilB * 0.37 + soilMicro * 0.15;" +
                 "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055 * detailBalance;" +
+                // A separate close-range soil micro field gives small warm earth specks
+                // without turning the mid/far ground brown or noisy.
+                "        float soilCloseA = groundNoise(vGroundXZ * 9.5 + vec2(53.0, 31.0));" +
+                "        float soilCloseB = groundNoiseRotated(vGroundXZ * 13.5 + vec2(89.0, 11.0));" +
+                "        float soilCloseField = soilCloseA * 0.60 + soilCloseB * 0.40;" +
+                "        float soilCloseMask = smoothstep(0.66, 0.82, soilCloseField) * 0.070 * closeMicro;" +
                 "        vec3 subtleSoil = vec3(0.46, 0.35, 0.18) * vLight;" +
-                "        finalColor = mix(finalColor, subtleSoil, soilMask);" +
+                "        finalColor = mix(finalColor, subtleSoil, soilMask + soilCloseMask);" +
                 // Step 3B-3: natural texture variation. Use multi-scale value noise
                 // so density changes smoothly without the previous long wave bands.
                 "        float naturalA = groundNoiseRotated(vGroundXZ * 0.48 + vec2(5.0, 41.0));" +
