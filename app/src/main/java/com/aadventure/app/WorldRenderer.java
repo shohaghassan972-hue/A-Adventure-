@@ -186,6 +186,15 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float softEarth = smoothstep(0.79, 0.96, micro) * 0.035;" +
                 "        vec3 earthHint = vec3(0.39, 0.31, 0.16) * vLight;" +
                 "        finalColor = mix(finalColor, earthHint, softEarth);" +
+                // Step 3B-2: tiny irregular soil detail blended into the grass.
+                // Keep the mask sparse and low-contrast so there are no large brown patches.
+                "        float soilA = 0.5 + 0.5 * sin(vGroundXZ.x * 3.15 + sin(vGroundXZ.y * 1.15) * 1.25);" +
+                "        float soilB = 0.5 + 0.5 * cos(vGroundXZ.y * 3.75 - sin(vGroundXZ.x * 1.35) * 1.10);" +
+                "        float soilMicro = 0.5 + 0.5 * sin(vGroundXZ.x * 8.2 - vGroundXZ.y * 6.7 + sin(vGroundXZ.x * 1.7 + vGroundXZ.y * 2.1));" +
+                "        float soilField = soilA * 0.48 + soilB * 0.37 + soilMicro * 0.15;" +
+                "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055;" +
+                "        vec3 subtleSoil = vec3(0.46, 0.35, 0.18) * vLight;" +
+                "        finalColor = mix(finalColor, subtleSoil, soilMask);" +
                 "    }" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
                 "    finalColor = mix(finalColor, hazeColor, haze);" +
