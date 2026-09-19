@@ -8,13 +8,10 @@ public class WorldView extends GLSurfaceView {
 
     private final WorldRenderer renderer;
 
-    // Multi-touch pointer tracking.
-    // One finger can control movement while another controls camera look.
-    private int movingPointerId = MotionEvent.INVALID_POINTER_ID;
+    // The joystick overlay owns all left-side movement touches.
+    // WorldView only owns right-side camera-look touches.
     private int lookingPointerId = MotionEvent.INVALID_POINTER_ID;
 
-    private float movingLastX;
-    private float movingLastY;
     private float lookingLastX;
     private float lookingLastY;
 
@@ -65,18 +62,15 @@ public class WorldView extends GLSurfaceView {
             }
 
             case MotionEvent.ACTION_MOVE: {
-                updatePointer(event, movingPointerId, true);
-                updatePointer(event, lookingPointerId, false);
+                // Left-side movement is handled exclusively by JoystickOverlay.
+                // WorldView only processes the active right-side camera pointer.
+                updatePointer(event, lookingPointerId);
                 return true;
             }
 
             case MotionEvent.ACTION_POINTER_UP: {
                 // Only release the pointer that actually lifted.
                 final int pointerId = event.getPointerId(actionIndex);
-
-                if (pointerId == movingPointerId) {
-                    movingPointerId = MotionEvent.INVALID_POINTER_ID;
-                }
 
                 if (pointerId == lookingPointerId) {
                     lookingPointerId = MotionEvent.INVALID_POINTER_ID;
@@ -87,7 +81,6 @@ public class WorldView extends GLSurfaceView {
 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL: {
-                movingPointerId = MotionEvent.INVALID_POINTER_ID;
                 lookingPointerId = MotionEvent.INVALID_POINTER_ID;
                 return true;
             }
@@ -108,13 +101,10 @@ public class WorldView extends GLSurfaceView {
         final float y = event.getY(pointerIndex);
 
         if (x < getWidth() * 0.45f) {
-
-            if (movingPointerId == MotionEvent.INVALID_POINTER_ID) {
-                movingPointerId = pointerId;
-                movingLastX = x;
-                movingLastY = y;
-            }
-
+            // Left-side touch belongs exclusively to JoystickOverlay.
+            // Do not register it here; this prevents two movement systems
+            // from consuming the same finger and causing timing jitter.
+            return;
         } else {
 
             if (lookingPointerId == MotionEvent.INVALID_POINTER_ID) {
@@ -130,8 +120,7 @@ public class WorldView extends GLSurfaceView {
      */
     private void updatePointer(
             MotionEvent event,
-            int pointerId,
-            boolean isMovement
+            int pointerId
     ) {
 
         if (pointerId == MotionEvent.INVALID_POINTER_ID) {
@@ -147,60 +136,29 @@ public class WorldView extends GLSurfaceView {
         final float x = event.getX(pointerIndex);
         final float y = event.getY(pointerIndex);
 
-        if (isMovement) {
+        float dx = x - lookingLastX;
+        float dy = y - lookingLastY;
 
-            float dx = x - movingLastX;
-            float dy = y - movingLastY;
+        /*
+         * Camera sensitivity remains unchanged.
+         * Horizontal = yaw
+         * Vertical   = pitch
+         */
+        float turnAmount =
+                dx * 0.004f;
 
-            /*
-             * Movement
-             *
-             * Up    = forward
-             * Down  = backward
-             * Left  = strafe left
-             * Right = strafe right
-             */
+        float lookAmount =
+                -dy * 0.004f;
 
-            float moveForward =
-                    -dy * 0.035f;
+        renderer.addYaw(
+                turnAmount
+        );
 
-            float moveSide =
-                    dx * 0.035f;
+        renderer.addPitch(
+                lookAmount
+        );
 
-            renderer.addMovement(
-                    moveForward,
-                    moveSide
-            );
-
-            movingLastX = x;
-            movingLastY = y;
-
-        } else {
-
-            float dx = x - lookingLastX;
-            float dy = y - lookingLastY;
-
-            /*
-             * Camera sensitivity remains unchanged.
-             * Horizontal = yaw
-             * Vertical   = pitch
-             */
-            float turnAmount =
-                    dx * 0.004f;
-
-            float lookAmount =
-                    -dy * 0.004f;
-
-            renderer.addYaw(
-                    turnAmount
-            );
-
-            renderer.addPitch(
-                    lookAmount
-            );
-
-            lookingLastX = x;
-            lookingLastY = y;
-        }
+        lookingLastX = x;
+        lookingLastY = y;
     }
 }
