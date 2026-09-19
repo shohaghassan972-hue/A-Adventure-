@@ -110,6 +110,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private volatile float joystickForward = 0f;
     private volatile float joystickSide = 0f;
 
+    // Movement timing: keep joystick speed independent of render-frame rate.
+    private long lastFrameNanos = 0L;
+    private static final float JOYSTICK_SPEED = 3.3f;
+
     @Override
     public void onSurfaceCreated(
             javax.microedition.khronos.opengles.GL10 gl,
@@ -527,6 +531,30 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.GL_DEPTH_BUFFER_BIT
         );
 
+        // Apply joystick movement before building the camera matrix so the
+        // current frame is rendered from the current position. Delta-time
+        // keeps the movement speed stable across different frame rates.
+        long nowNanos = System.nanoTime();
+        float deltaSeconds;
+        if (lastFrameNanos == 0L) {
+            deltaSeconds = 1f / 60f;
+        } else {
+            deltaSeconds = (nowNanos - lastFrameNanos) * 1.0e-9f;
+            // Ignore unusually long pauses so a frame hitch cannot cause a
+            // large movement jump when rendering resumes.
+            deltaSeconds = Math.max(0f, Math.min(1f / 30f, deltaSeconds));
+        }
+        lastFrameNanos = nowNanos;
+
+        float currentJoystickForward = joystickForward;
+        float currentJoystickSide = joystickSide;
+        if (currentJoystickForward != 0f || currentJoystickSide != 0f) {
+            addMovement(
+                    currentJoystickForward * JOYSTICK_SPEED * deltaSeconds,
+                    currentJoystickSide * JOYSTICK_SPEED * deltaSeconds
+            );
+        }
+
         float cosPitch =
                 (float) Math.cos(pitch);
 
@@ -591,17 +619,6 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 ambientLightHandle,
                 0.72f
         );
-
-        // Apply joystick movement continuously while the finger is held.
-        // A centered joystick produces zero movement.
-        float currentJoystickForward = joystickForward;
-        float currentJoystickSide = joystickSide;
-        if (currentJoystickForward != 0f || currentJoystickSide != 0f) {
-            addMovement(
-                    currentJoystickForward * 0.055f,
-                    currentJoystickSide * 0.055f
-            );
-        }
 
         // Step 3A-3: ground variation is baked into a smooth mesh. Keep the
         // previous flat-ground lighting treatment so daylight does not introduce
