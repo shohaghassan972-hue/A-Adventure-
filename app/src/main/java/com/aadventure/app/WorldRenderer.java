@@ -92,6 +92,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int lightDirHandle;
     private int ambientLightHandle;
     private int groundDetailHandle;
+    private int groundDaylightHandle;
 
     // Step 3A-2: keep ground tiles visually flat so tile color variation does not
     // create artificial triangular shading across the field.
@@ -155,11 +156,19 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying float vLight;" +
                 "varying vec2 vGroundXZ;" +
                 "uniform float uGroundDetail;" +
+                "uniform float uGroundDaylight;" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
                 "    vec3 litColor = vColor.rgb * vLight;" +
                 "    vec3 finalColor = litColor;" +
+                "    if (uGroundDaylight > 0.5) {" +
+                "        float broadA = 0.5 + 0.5 * sin(vGroundXZ.x * 0.105 + vGroundXZ.y * 0.052);" +
+                "        float broadB = 0.5 + 0.5 * cos(vGroundXZ.x * 0.071 - vGroundXZ.y * 0.118);" +
+                "        float daylightField = broadA * 0.55 + broadB * 0.45;" +
+                "        float daylight = 0.90 + daylightField * 0.14;" +
+                "        finalColor *= daylight;" +
+                "    }" +
                 "    if (uGroundDetail > 0.5) {" +
                 "        float fineA = 0.5 + 0.5 * sin(vGroundXZ.x * 5.4 + sin(vGroundXZ.y * 1.75) * 1.15);" +
                 "        float fineB = 0.5 + 0.5 * cos(vGroundXZ.y * 6.1 - sin(vGroundXZ.x * 1.55) * 1.05);" +
@@ -240,6 +249,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.glGetUniformLocation(
                         program,
                         "uGroundDetail"
+                );
+
+        groundDaylightHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uGroundDaylight"
                 );
 
         String skyVertexShaderCode =
@@ -546,7 +561,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         groundFlatColor = true;
         GLES20.glUniform1f(ambientLightHandle, 1.0f);
         GLES20.glUniform1f(groundDetailHandle, 1.0f);
+        GLES20.glUniform1f(groundDaylightHandle, 1.0f);
         drawGround();
+        GLES20.glUniform1f(groundDaylightHandle, 0.0f);
         GLES20.glUniform1f(groundDetailHandle, 0.0f);
         groundFlatColor = false;
         GLES20.glUniform1f(ambientLightHandle, 0.72f);
