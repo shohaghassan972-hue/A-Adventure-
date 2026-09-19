@@ -194,6 +194,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        finalColor *= daylight;" +
                 "    }" +
                 "    if (uGroundDetail > 0.5) {" +
+                // Step 3B-4: distance-based detail balance. Keep close ground rich,
+                // reduce detail through the mid range, and let far ground read as a
+                // smooth green field. This does not change the Step 3B-3 noise fields;
+                // it only controls how strongly the existing detail reaches the eye.
+                "        float closeDetail = 1.0 - smoothstep(14.0, 52.0, vDistance);" +
+                "        float midDetail = 1.0 - smoothstep(28.0, 78.0, vDistance);" +
+                "        float detailBalance = closeDetail * 0.78 + midDetail * 0.22;" +
+                "        detailBalance = clamp(detailBalance, 0.0, 1.0);" +
                 "        float surfaceLow = groundNoiseRotated(vGroundXZ * 0.72);" +
                 "        float surfaceMid = groundNoise(vGroundXZ * 1.55 + vec2(31.0, 13.0));" +
                 "        float surfaceFine = groundNoiseRotated(vGroundXZ * 4.6 + vec2(7.0, 23.0));" +
@@ -203,11 +211,11 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float grassB = groundNoiseRotated(vGroundXZ * 10.5 + vec2(29.0, 17.0));" +
                 "        float grassFine = grassA * 0.55 + grassB * 0.45;" +
                 "        float grassMask = smoothstep(0.30, 0.76, grassFine);" +
-                "        float grassShade = (grassMask - 0.5) * 0.045;" +
+                "        float grassShade = (grassMask - 0.5) * 0.045 * detailBalance;" +
                 "        float greenVariation = (surface - 0.5) * 0.070 + grassShade;" +
                 "        finalColor *= 1.0 + greenVariation;" +
                 "        float softEarthNoise = groundNoiseRotated(vGroundXZ * 3.2 + vec2(43.0, 19.0));" +
-                "        float softEarth = smoothstep(0.80, 0.96, softEarthNoise) * 0.028;" +
+                "        float softEarth = smoothstep(0.80, 0.96, softEarthNoise) * 0.028 * detailBalance;" +
                 "        vec3 earthHint = vec3(0.39, 0.31, 0.16) * vLight;" +
                 "        finalColor = mix(finalColor, earthHint, softEarth);" +
                 // Step 3B-2: tiny irregular soil detail blended into the grass.
@@ -215,7 +223,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float soilB = groundNoiseRotated(vGroundXZ * 3.1 + vec2(23.0, 47.0));" +
                 "        float soilMicro = groundNoise(vGroundXZ * 6.8 + vec2(71.0, 37.0));" +
                 "        float soilField = soilA * 0.48 + soilB * 0.37 + soilMicro * 0.15;" +
-                "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055;" +
+                "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055 * detailBalance;" +
                 "        vec3 subtleSoil = vec3(0.46, 0.35, 0.18) * vLight;" +
                 "        finalColor = mix(finalColor, subtleSoil, soilMask);" +
                 // Step 3B-3: natural texture variation. Use multi-scale value noise
@@ -226,10 +234,10 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float naturalField = naturalA * 0.42 + naturalB * 0.33 + naturalC * 0.25;" +
                 "        float density = smoothstep(0.22, 0.78, naturalField);" +
                 "        float localFine = groundNoise(vGroundXZ * 5.2 + vec2(13.0, 67.0));" +
-                "        float fineVariation = (localFine - 0.5) * 0.022;" +
-                "        float densityVariation = (density - 0.5) * 0.028;" +
+                "        float fineVariation = (localFine - 0.5) * 0.022 * detailBalance;" +
+                "        float densityVariation = (density - 0.5) * 0.028 * detailBalance;" +
                 "        finalColor *= 1.0 + fineVariation + densityVariation;" +
-                "        float sparseSoil = smoothstep(0.63, 0.86, naturalField) * 0.018;" +
+                "        float sparseSoil = smoothstep(0.63, 0.86, naturalField) * 0.018 * detailBalance;" +
                 "        finalColor = mix(finalColor, subtleSoil, sparseSoil);" +
                 "    }" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
