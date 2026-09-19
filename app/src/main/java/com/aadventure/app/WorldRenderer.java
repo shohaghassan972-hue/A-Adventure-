@@ -195,6 +195,20 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055;" +
                 "        vec3 subtleSoil = vec3(0.46, 0.35, 0.18) * vLight;" +
                 "        finalColor = mix(finalColor, subtleSoil, soilMask);" +
+                // Step 3B-3: natural texture variation. Combine low, mid and
+                // fine irregular fields so grass/soil density changes gradually
+                // instead of repeating as a visible grid or stripe.
+                "        float naturalA = 0.5 + 0.5 * sin(vGroundXZ.x * 0.92 + sin(vGroundXZ.y * 0.71) * 1.9);" +
+                "        float naturalB = 0.5 + 0.5 * cos(vGroundXZ.y * 1.18 - sin(vGroundXZ.x * 0.63) * 1.7);" +
+                "        float naturalC = 0.5 + 0.5 * sin(vGroundXZ.x * 1.73 + vGroundXZ.y * 1.31 + sin(vGroundXZ.x * 0.37 - vGroundXZ.y * 0.49) * 2.2);" +
+                "        float naturalField = naturalA * 0.42 + naturalB * 0.33 + naturalC * 0.25;" +
+                "        float density = smoothstep(0.22, 0.78, naturalField);" +
+                "        float localFine = 0.5 + 0.5 * sin(vGroundXZ.x * 9.1 - vGroundXZ.y * 7.4 + sin(vGroundXZ.x * 1.9 + vGroundXZ.y * 1.3));" +
+                "        float fineVariation = (localFine - 0.5) * 0.022;" +
+                "        float densityVariation = (density - 0.5) * 0.028;" +
+                "        finalColor *= 1.0 + fineVariation + densityVariation;" +
+                "        float sparseSoil = smoothstep(0.63, 0.86, naturalField) * 0.018;" +
+                "        finalColor = mix(finalColor, subtleSoil, sparseSoil);" +
                 "    }" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
                 "    finalColor = mix(finalColor, hazeColor, haze);" +
