@@ -174,7 +174,14 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "        float fineB = 0.5 + 0.5 * cos(vGroundXZ.y * 6.1 - sin(vGroundXZ.x * 1.55) * 1.05);" +
                 "        float micro = 0.5 + 0.5 * sin(vGroundXZ.x * 11.5 + vGroundXZ.y * 9.3 + sin(vGroundXZ.x * 2.2 - vGroundXZ.y * 1.8));" +
                 "        float surface = fineA * 0.42 + fineB * 0.38 + micro * 0.20;" +
-                "        float greenVariation = (surface - 0.5) * 0.075;" +
+                // Step 3B-1: subtle procedural grass detail. It uses fine
+                // // overlapping fields instead of a texture image or extra geometry.
+                "        float grassA = 0.5 + 0.5 * sin(vGroundXZ.x * 18.0 + sin(vGroundXZ.y * 3.4) * 1.7);" +
+                "        float grassB = 0.5 + 0.5 * cos(vGroundXZ.y * 21.0 - sin(vGroundXZ.x * 2.8) * 1.4);" +
+                "        float grassFine = grassA * 0.55 + grassB * 0.45;" +
+                "        float grassMask = smoothstep(0.28, 0.78, grassFine);" +
+                "        float grassShade = (grassMask - 0.5) * 0.045;" +
+                "        float greenVariation = (surface - 0.5) * 0.075 + grassShade;" +
                 "        finalColor *= 1.0 + greenVariation;" +
                 "        float softEarth = smoothstep(0.79, 0.96, micro) * 0.035;" +
                 "        vec3 earthHint = vec3(0.39, 0.31, 0.16) * vLight;" +
@@ -966,10 +973,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
 
     private void drawGround() {
 
-        // Step 3A-3: natural earth-tone variation.
-        // The field stays predominantly green, while small, soft variations
-        // become easier to notice at close range. The ground mesh is continuous
-        // so there are no large tile-color boundaries or artificial diagonals.
+        // Step 3B-1: keep the continuous ground mesh and add the new grass
+        // detail procedurally in the shader, without texture images or extra geometry.
         drawGroundMesh();
     }
 
