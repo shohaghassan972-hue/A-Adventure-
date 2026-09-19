@@ -157,53 +157,71 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying vec2 vGroundXZ;" +
                 "uniform float uGroundDetail;" +
                 "uniform float uGroundDaylight;" +
+                // Small value-noise helpers remove the long repeating sine/cosine bands.
+                // The interpolation keeps the result smooth while the hashed cell values
+                // prevent the same stripe/wave shape from marching across the ground.
+                "float groundHash(vec2 p) {" +
+                "    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);" +
+                "}" +
+                "float groundNoise(vec2 p) {" +
+                "    vec2 i = floor(p);" +
+                "    vec2 f = fract(p);" +
+                "    f = f * f * (3.0 - 2.0 * f);" +
+                "    float a = groundHash(i);" +
+                "    float b = groundHash(i + vec2(1.0, 0.0));" +
+                "    float c = groundHash(i + vec2(0.0, 1.0));" +
+                "    float d = groundHash(i + vec2(1.0, 1.0));" +
+                "    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);" +
+                "}" +
+                "float groundNoiseRotated(vec2 p) {" +
+                "    vec2 q = vec2(p.x * 0.9397 - p.y * 0.3420, p.x * 0.3420 + p.y * 0.9397);" +
+                "    return groundNoise(q);" +
+                "}" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
                 "    vec3 litColor = vColor.rgb * vLight;" +
                 "    vec3 finalColor = litColor;" +
                 "    if (uGroundDaylight > 0.5) {" +
-                "        float broadA = 0.5 + 0.5 * sin(vGroundXZ.x * 0.105 + vGroundXZ.y * 0.052);" +
-                "        float broadB = 0.5 + 0.5 * cos(vGroundXZ.x * 0.071 - vGroundXZ.y * 0.118);" +
-                "        float daylightField = broadA * 0.55 + broadB * 0.45;" +
-                "        float daylight = 0.90 + daylightField * 0.14;" +
+                "        float daylightLow = groundNoiseRotated(vGroundXZ * 0.11);" +
+                "        float daylightMid = groundNoise(vGroundXZ * 0.19 + vec2(17.0, 9.0));" +
+                "        float daylightField = daylightLow * 0.65 + daylightMid * 0.35;" +
+                "        float daylight = 0.93 + (daylightField - 0.5) * 0.10;" +
                 "        finalColor *= daylight;" +
                 "    }" +
                 "    if (uGroundDetail > 0.5) {" +
-                "        float fineA = 0.5 + 0.5 * sin(vGroundXZ.x * 5.4 + sin(vGroundXZ.y * 1.75) * 1.15);" +
-                "        float fineB = 0.5 + 0.5 * cos(vGroundXZ.y * 6.1 - sin(vGroundXZ.x * 1.55) * 1.05);" +
-                "        float micro = 0.5 + 0.5 * sin(vGroundXZ.x * 11.5 + vGroundXZ.y * 9.3 + sin(vGroundXZ.x * 2.2 - vGroundXZ.y * 1.8));" +
-                "        float surface = fineA * 0.42 + fineB * 0.38 + micro * 0.20;" +
-                // Step 3B-1: subtle procedural grass detail. It uses fine
-                // // overlapping fields instead of a texture image or extra geometry.
-                "        float grassA = 0.5 + 0.5 * sin(vGroundXZ.x * 18.0 + sin(vGroundXZ.y * 3.4) * 1.7);" +
-                "        float grassB = 0.5 + 0.5 * cos(vGroundXZ.y * 21.0 - sin(vGroundXZ.x * 2.8) * 1.4);" +
+                "        float surfaceLow = groundNoiseRotated(vGroundXZ * 0.72);" +
+                "        float surfaceMid = groundNoise(vGroundXZ * 1.55 + vec2(31.0, 13.0));" +
+                "        float surfaceFine = groundNoiseRotated(vGroundXZ * 4.6 + vec2(7.0, 23.0));" +
+                "        float surface = surfaceLow * 0.48 + surfaceMid * 0.34 + surfaceFine * 0.18;" +
+                // Step 3B-1: subtle procedural grass detail without repeating bands.
+                "        float grassA = groundNoise(vGroundXZ * 7.5 + vec2(11.0, 5.0));" +
+                "        float grassB = groundNoiseRotated(vGroundXZ * 10.5 + vec2(29.0, 17.0));" +
                 "        float grassFine = grassA * 0.55 + grassB * 0.45;" +
-                "        float grassMask = smoothstep(0.28, 0.78, grassFine);" +
+                "        float grassMask = smoothstep(0.30, 0.76, grassFine);" +
                 "        float grassShade = (grassMask - 0.5) * 0.045;" +
-                "        float greenVariation = (surface - 0.5) * 0.075 + grassShade;" +
+                "        float greenVariation = (surface - 0.5) * 0.070 + grassShade;" +
                 "        finalColor *= 1.0 + greenVariation;" +
-                "        float softEarth = smoothstep(0.79, 0.96, micro) * 0.035;" +
+                "        float softEarthNoise = groundNoiseRotated(vGroundXZ * 3.2 + vec2(43.0, 19.0));" +
+                "        float softEarth = smoothstep(0.80, 0.96, softEarthNoise) * 0.028;" +
                 "        vec3 earthHint = vec3(0.39, 0.31, 0.16) * vLight;" +
                 "        finalColor = mix(finalColor, earthHint, softEarth);" +
                 // Step 3B-2: tiny irregular soil detail blended into the grass.
-                // Keep the mask sparse and low-contrast so there are no large brown patches.
-                "        float soilA = 0.5 + 0.5 * sin(vGroundXZ.x * 3.15 + sin(vGroundXZ.y * 1.15) * 1.25);" +
-                "        float soilB = 0.5 + 0.5 * cos(vGroundXZ.y * 3.75 - sin(vGroundXZ.x * 1.35) * 1.10);" +
-                "        float soilMicro = 0.5 + 0.5 * sin(vGroundXZ.x * 8.2 - vGroundXZ.y * 6.7 + sin(vGroundXZ.x * 1.7 + vGroundXZ.y * 2.1));" +
+                "        float soilA = groundNoise(vGroundXZ * 2.35 + vec2(61.0, 7.0));" +
+                "        float soilB = groundNoiseRotated(vGroundXZ * 3.1 + vec2(23.0, 47.0));" +
+                "        float soilMicro = groundNoise(vGroundXZ * 6.8 + vec2(71.0, 37.0));" +
                 "        float soilField = soilA * 0.48 + soilB * 0.37 + soilMicro * 0.15;" +
                 "        float soilMask = smoothstep(0.68, 0.84, soilField) * 0.055;" +
                 "        vec3 subtleSoil = vec3(0.46, 0.35, 0.18) * vLight;" +
                 "        finalColor = mix(finalColor, subtleSoil, soilMask);" +
-                // Step 3B-3: natural texture variation. Combine low, mid and
-                // fine irregular fields so grass/soil density changes gradually
-                // instead of repeating as a visible grid or stripe.
-                "        float naturalA = 0.5 + 0.5 * sin(vGroundXZ.x * 0.92 + sin(vGroundXZ.y * 0.71) * 1.9);" +
-                "        float naturalB = 0.5 + 0.5 * cos(vGroundXZ.y * 1.18 - sin(vGroundXZ.x * 0.63) * 1.7);" +
-                "        float naturalC = 0.5 + 0.5 * sin(vGroundXZ.x * 1.73 + vGroundXZ.y * 1.31 + sin(vGroundXZ.x * 0.37 - vGroundXZ.y * 0.49) * 2.2);" +
+                // Step 3B-3: natural texture variation. Use multi-scale value noise
+                // so density changes smoothly without the previous long wave bands.
+                "        float naturalA = groundNoiseRotated(vGroundXZ * 0.48 + vec2(5.0, 41.0));" +
+                "        float naturalB = groundNoise(vGroundXZ * 0.82 + vec2(37.0, 17.0));" +
+                "        float naturalC = groundNoiseRotated(vGroundXZ * 1.35 + vec2(73.0, 29.0));" +
                 "        float naturalField = naturalA * 0.42 + naturalB * 0.33 + naturalC * 0.25;" +
                 "        float density = smoothstep(0.22, 0.78, naturalField);" +
-                "        float localFine = 0.5 + 0.5 * sin(vGroundXZ.x * 9.1 - vGroundXZ.y * 7.4 + sin(vGroundXZ.x * 1.9 + vGroundXZ.y * 1.3));" +
+                "        float localFine = groundNoise(vGroundXZ * 5.2 + vec2(13.0, 67.0));" +
                 "        float fineVariation = (localFine - 0.5) * 0.022;" +
                 "        float densityVariation = (density - 0.5) * 0.028;" +
                 "        finalColor *= 1.0 + fineVariation + densityVariation;" +
