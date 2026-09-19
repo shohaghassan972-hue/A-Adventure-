@@ -91,6 +91,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
     private int viewHandle;
     private int lightDirHandle;
     private int ambientLightHandle;
+    private int groundDetailHandle;
 
     // Step 3A-2: keep ground tiles visually flat so tile color variation does not
     // create artificial triangular shading across the field.
@@ -134,6 +135,8 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
                 "varying float vLight;" +
+                "varying vec2 vGroundXZ;" +
+                "uniform float uGroundDetail;" +
                 "void main() {" +
                 "    vec4 eyePos = uView * aPosition;" +
                 "    gl_Position = uMVP * aPosition;" +
@@ -142,6 +145,7 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "    vec3 pseudoNormal = normalize(vec3(aPosition.x, aPosition.y * 1.35, aPosition.z));" +
                 "    float diffuse = max(dot(pseudoNormal, normalize(uLightDir)), 0.0);" +
                 "    vLight = uAmbientLight + diffuse * (1.0 - uAmbientLight);" +
+                "    vGroundXZ = aPosition.xz;" +
                 "}";
 
         String fragmentShaderCode =
@@ -149,12 +153,26 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 "varying vec4 vColor;" +
                 "varying float vDistance;" +
                 "varying float vLight;" +
+                "varying vec2 vGroundXZ;" +
+                "uniform float uGroundDetail;" +
                 "void main() {" +
                 "    float haze = smoothstep(65.0, 115.0, vDistance);" +
                 "    haze *= 0.18;" +
                 "    vec3 litColor = vColor.rgb * vLight;" +
+                "    vec3 finalColor = litColor;" +
+                "    if (uGroundDetail > 0.5) {" +
+                "        float fineA = 0.5 + 0.5 * sin(vGroundXZ.x * 5.4 + sin(vGroundXZ.y * 1.75) * 1.15);" +
+                "        float fineB = 0.5 + 0.5 * cos(vGroundXZ.y * 6.1 - sin(vGroundXZ.x * 1.55) * 1.05);" +
+                "        float micro = 0.5 + 0.5 * sin(vGroundXZ.x * 11.5 + vGroundXZ.y * 9.3 + sin(vGroundXZ.x * 2.2 - vGroundXZ.y * 1.8));" +
+                "        float surface = fineA * 0.42 + fineB * 0.38 + micro * 0.20;" +
+                "        float greenVariation = (surface - 0.5) * 0.075;" +
+                "        finalColor *= 1.0 + greenVariation;" +
+                "        float softEarth = smoothstep(0.79, 0.96, micro) * 0.035;" +
+                "        vec3 earthHint = vec3(0.39, 0.31, 0.16) * vLight;" +
+                "        finalColor = mix(finalColor, earthHint, softEarth);" +
+                "    }" +
                 "    vec3 hazeColor = vec3(0.70, 0.82, 0.90);" +
-                "    vec3 finalColor = mix(litColor, hazeColor, haze);" +
+                "    finalColor = mix(finalColor, hazeColor, haze);" +
                 "    gl_FragColor = vec4(finalColor, vColor.a);" +
                 "}";
 
@@ -216,6 +234,12 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
                 GLES20.glGetUniformLocation(
                         program,
                         "uAmbientLight"
+                );
+
+        groundDetailHandle =
+                GLES20.glGetUniformLocation(
+                        program,
+                        "uGroundDetail"
                 );
 
         String skyVertexShaderCode =
@@ -521,7 +545,9 @@ public class WorldRenderer implements GLSurfaceView.Renderer {
         // artificial diagonal shading over the natural color variation.
         groundFlatColor = true;
         GLES20.glUniform1f(ambientLightHandle, 1.0f);
+        GLES20.glUniform1f(groundDetailHandle, 1.0f);
         drawGround();
+        GLES20.glUniform1f(groundDetailHandle, 0.0f);
         groundFlatColor = false;
         GLES20.glUniform1f(ambientLightHandle, 0.72f);
 
